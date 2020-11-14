@@ -111,9 +111,9 @@ def write_file(filepath, objects, depsgraph, scene,
         if len(me.uv_layers) is 0:
             print("Object " + obj.name + " is missing UV coodinates! Skipping.")
             continue
-        uv_layer = me.uv_layers.active.data
+        uv_layer = me.uv_layers.active.data[:]
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
-        
+        me.calc_normals_split() #unsure
         bm = bmesh.new()
         hold_meshes.append(bm)
         bm.from_mesh(me)
@@ -147,58 +147,99 @@ def write_file(filepath, objects, depsgraph, scene,
 #                            wasCopied[vert.index]
             
             
-        wasCopied = [None] * len(bm.verts)
-        unique_verts = []
-        indices = []
-        normals = []
-        face_normals = [] #[]
+        
             
         #split_faces = []
         #idx2idxmap = {}
         print("Processing mesh...")
-        area = 0.0
+#        face_index_pairs = [(face, index) for index, face in enumerate(me.polygons)]
+#        uv = f_index = uv_index = uv_key = uv_val = uv_ls = None
+
+#        uv_face_mapping = [None] * len(face_index_pairs)
+
+#        uv_dict = {}
+#        uv_get = uv_dict.get
+#        for f, f_index in face_index_pairs:
+#            uv_ls = uv_face_mapping[f_index] = []
+#            for uv_index, l_index in enumerate(f.loop_indices):
+#                uv = uv_layer[l_index].uv
+#                # include the vertex index in the key so we don't share UV's between vertices,
+#                # allowed by the OBJ spec but can cause issues for other importers, see: T47010.
+
+#                # this works too, shared UV's for all verts
+#                #~ uv_key = veckey2d(uv)
+#                uv_key = loops[l_index].vertex_index, veckey2d(uv)
+
+#                uv_val = uv_get(uv_key)
+#                if uv_val is None:
+#                    uv_val = uv_dict[uv_key] = uv_unique_count
+#                    fw('vt %.6f %.6f\n' % uv[:])
+#                    uv_unique_count += 1
+#                uv_ls.append(uv_val)
+
+        #del uv_dict, uv, f_index, uv_index, uv_ls, uv_get, uv_key, uv_val
+        
+        
+        #split into materials
+        materials = me.materials
+        print("object contains " + str(len(materials)) + " materials")
+        #split_matblocks = [None] * len(materials)
+        split_matblocks = [[] for i in range(len(materials))]
         for face in bm.faces:
-            area += face.calc_area()
-            #split_faces.append(face)
-            face_normals.append(face.normal[:])
-            for vert in face.verts:
-                if wasCopied[vert.index] is None:
-                    wasCopied[vert.index] = len(unique_verts)
-                    unique_verts.append([vert.co[:], uv_layer[vert.index].uv[:]])
-                    normals.append(vert.normal[:])
-                indices.append(wasCopied[vert.index])
+            split_matblocks[face.material_index].append(face)
+        
+        for i, srcobject in enumerate(split_matblocks):
+            wasCopied = [None] * len(bm.verts)
+            unique_verts = []
+            indices = []
+            normals = []
+            face_normals = [] #[]
+
+            area = 0.0
+            for face in srcobject:
+                area += face.calc_area()
                 
-            if len(unique_verts) > 65532:
-                #apply and update
-                #ret = bmesh.ops.split(bm, geom=split_faces)
-                #split_blocks.append(ret["geom"])
-                meshes.append([obj,
+                #split_faces.append(face)
+                face_normals.append(face.normal[:])
+                for loop in face.loops:
+                    vert = loop.vert
+                    if wasCopied[vert.index] is None:
+                        wasCopied[vert.index] = len(unique_verts)
+                        unique_verts.append([vert.co[:], uv_layer[loop.index].uv[:]])
+                        normals.append(vert.normal[:])
+                    indices.append(wasCopied[vert.index])
+                    
+                if len(unique_verts) > 65532:
+                    #apply and update
+                    #ret = bmesh.ops.split(bm, geom=split_faces)
+                    #split_blocks.append(ret["geom"])
+                    meshes.append([obj, materials[i],
+                                   unique_verts.copy(),
+                                   indices.copy(),
+                                   normals.copy(),
+                                   face_normals.copy(),
+                                   area,
+                                   uv_layer])
+                    
+                    unique_verts.clear()
+                    indices.clear()
+                    normals.clear()
+                    face_normals.clear()
+                    area = 0.0
+                    #split_faces.clear()
+                    #idx2idxmap.clear()
+                    wasCopied = [None] * len(bm.verts)
+                    print("Block split.")
+                    
+            #Add remaining verts
+            if len(unique_verts) > 0:
+                meshes.append([obj, materials[i],
                                unique_verts.copy(),
                                indices.copy(),
                                normals.copy(),
                                face_normals.copy(),
                                area,
                                uv_layer])
-                
-                unique_verts.clear()
-                indices.clear()
-                normals.clear()
-                face_normals.clear()
-                area = 0.0
-                #split_faces.clear()
-                #idx2idxmap.clear()
-                wasCopied = [None] * len(bm.verts)
-                print("Block split.")
-                
-        #Add remaining verts
-        if len(unique_verts) > 0:
-            meshes.append([obj,
-                           unique_verts.copy(),
-                           indices.copy(),
-                           normals.copy(),
-                           face_normals.copy(),
-                           area,
-                           uv_layer])
         print("Complete.")
 
         #bm.free()
@@ -238,21 +279,23 @@ def write_file(filepath, objects, depsgraph, scene,
                 obj = entry[0]
                 #mesh = entry[1]
                 #uv_layer = entry[2]
-#                [obj,
+##                [obj, materials[i]
 #                               unique_verts.copy(),
 #                               indices.copy(),
 #                               normals.copy(),
 #                               face_normals.copy(),
-#                               me.uv_layers.active.data]
-                verts = entry[1]
-                indices = entry[2]
-                normals = entry[3]
-                face_normals = entry[4]
-                area = entry[5]
-                uv_layer = entry[6]
+#                               area,
+#                               uv_layer]
+                mat = entry[1]
+                verts = entry[2]
+                indices = entry[3]
+                normals = entry[4]
+                face_normals = entry[5]
+                area = entry[6]
+                uv_layer = entry[7]
                 #uv_layer = mesh.uv_layers.active.data
                 #mesh_triangulate(mesh)
-                mat = obj.active_material
+                #mat = obj.active_material
                 
                 defaultMaterial = bpy.data.materials.new(obj.name)
                 if mat is None:
@@ -394,7 +437,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             co = vert[0]
                             texcoord = vert[1]
                             geom.write(struct.pack("<fff", co[0], co[1], co[2]))
-                            geom.write(struct.pack("<ff", texcoord[0], texcoord[1]))
+                            geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
                         #Indices
                         for idx in indices:
                             geom.write(struct.pack("<H", idx))
