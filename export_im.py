@@ -1,7 +1,7 @@
 import os
 import io
 import struct
-
+import bmesh
 import bpy
 from mathutils import Matrix, Vector, Color
 from bpy_extras import io_utils, node_shader_utils
@@ -18,7 +18,7 @@ def name_compat(name):
         return name.replace(' ', '_')
     
 def mesh_triangulate(me):
-    import bmesh
+    #import bmesh
     bm = bmesh.new()
     bm.from_mesh(me)
     bmesh.ops.triangulate(bm, faces=bm.faces)
@@ -38,6 +38,24 @@ def mesh_triangulate(me):
         
     #new_obj = src_obj.copy()
     #new_obj.data = src_obj.data.copy()
+    
+def jet_str(f, str):
+    encoded_name = (str + '\0').encode('utf-8')
+    f.write(struct.pack("<I", len(encoded_name)))
+    f.write(encoded_name)
+    
+def texture_file(type, img_path, target_dir):
+    basename = os.path.basename(img_path)
+    texturepath = target_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
+    txtpath = texturepath + ".txt"
+    print("write to " + txtpath)
+    with open(txtpath, "w") as f:
+        f.write("Primary=" + basename + "\n")
+        f.write("Alpha=" + basename + "\n")
+        f.write("Tile=st" + "\n")
+        if type is 8:
+            f.write("NormalMapHint=normalmap")
+    return texturepath
     
 def chunk_ver(f, ver):
     f.write(struct.pack("<I", ver))
@@ -88,10 +106,18 @@ def write_file(filepath, objects, depsgraph, scene,
 
         if me is None:
             continue
+        if len(me.uv_layers) is 0:
+            print("Object " + obj.name + " is missing UV coodinates! Skipping.")
+            continue
+        me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
         meshes.append([obj, me])
-    
+        
+    copy_set = set()
     with open(filepath, "wb") as f:
         #fw = f.write
+        source_dir = os.path.dirname(bpy.data.filepath)
+        dest_dir = os.path.dirname(filepath)
+        path_mode = 'AUTO'
         
         #JIRF, filesize
         f.write('JIRF'.encode('utf-8'))
@@ -107,19 +133,25 @@ def write_file(filepath, objects, depsgraph, scene,
                 #Rotation
                 info.write(struct.pack("<ffff", objRotation.x, objRotation.y, objRotation.z, objRotation.w))
                 #NumAttributes
-                info.write(struct.pack("<I", 0)) #FIX
+                info.write(struct.pack("<I", len(meshes)))
                 #MaxInfluencePerVertex
                 info.write(struct.pack("<I", 0))
                 #MaxInfluencePerChunk
                 info.write(struct.pack("<I", 0))
                 end_chunk(rf, info)
             
+            
             for i, entry in enumerate(meshes):
                 obj = entry[0]
                 mesh = entry[1]
+                
+                uv_layer = mesh.uv_layers.active.data
+                #mesh_triangulate(mesh)
                 mat = obj.active_material
+                
+                defaultMaterial = bpy.data.materials.new(mesh.name)
                 if mat is None:
-                    mat = bpy.data.materials.new("Material." + str(i))
+                    mat = defaultMaterial
                 
                 rf.write('CHNK'.encode('utf-8'))
                 with io.BytesIO() as attr:
@@ -131,20 +163,151 @@ def write_file(filepath, objects, depsgraph, scene,
                         chunk_ver(matl, 102)
                         #mat = mesh.active_material
                         #Name
-                        encoded_name = mat.name.encode('utf-8') + '\0'
-                        matl.write(struct.pack("<I", len(encoded_name)))
-                        matl.write(encoded_name)
+                        jet_str(matl, mat.name)
                         #NumProperties
                         matl.write(struct.pack("<I", 0))
+                        
+                        #nodes
+                        mat_wrap = node_shader_utils.PrincipledBSDFWrapper(mat)
+                        
                         #TwoSided
                         matl.write(struct.pack("<I", int(not mat.use_backface_culling)))
+                        #Opacity
+                        matl.write(struct.pack("<f", mat_wrap.alpha))
+                        #Ambient mat_wrap.base_color mat_wrap.base_color[:3]
+                        matl.write(struct.pack("<fff", 1.0, 1.0, 1.0))
+                        #Diffuse
+                        matl.write(struct.pack("<fff", mat_wrap.base_color[0],
+                                                       mat_wrap.base_color[1],
+                                                       mat_wrap.base_color[2]))
+                        #Specular
+                        matl.write(struct.pack("<fff", mat_wrap.specular,
+                                                       mat_wrap.specular,
+                                                       mat_wrap.specular))
+                        #Emissive
+                        if hasattr(mat_wrap, 'emission_strength'):
+                            emission_strength = mat_wrap.emission_strength
+                        else:
+                            emission_strength = 1.0
+                        
+                        emission = [emission_strength * c for c in mat_wrap.emission_color[:3]]
+                        matl.write(struct.pack("<fff", emission[0],
+                                                       emission[1],
+                                                       emission[2]))
+                        #Shininess
+                        matl.write(struct.pack("<f", (1.0 - mat_wrap.roughness) * 128.0))
+                        #Texture setup
+                        texCount = 0
+                        textures = []
+                        
+                        image_source = [
+                            None, #TEX_Ambient
+                            "base_color_texture", #TEX_Diffuse
+                            "specular_texture", #TEX_Specular
+                            "roughness_texture", #TEX_Shine
+                            None, #TEX_Shinestrength
+                            "emission_color_texture" if emission_strength != 0.0 else None, #TEX_Selfillum
+                            "alpha_texture", #TEX_Opacity
+                            None, #TEX_Filtercolor
+                            "normalmap_texture", #TEX_Bump,
+                            "metallic_texture", #TEX_Reflect,
+                            None, #TEX_Refract,
+                            None, #TEX_Displacement    
+                            ]
+                        for type, entry in enumerate(image_source):
+                            if entry is None:
+                                continue
+                            tex_wrap = getattr(mat_wrap, entry, None)
+                            if tex_wrap is None:
+                                continue
+                            image = tex_wrap.image
+                            if image is None:
+                                continue
+                            filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
+                                                       path_mode, "", copy_set, image.library)
+                            strength = 1.0
+                            if type is "normalmap_texture":
+                                strength = mat_wrap.normalmap_strength
+                            
+                            textures.append([type, texture_file(type, filepath, dest_dir), strength])
+                        
+                        #NumTextures
+                        matl.write(struct.pack("<I", len(textures)))
+                        for tex in textures:
+                            #Type
+                            matl.write(struct.pack("<I", tex[0]))
+                            #FileName
+                            jet_str(matl, tex[1])
+                            #Amount
+                            matl.write(struct.pack("<f", tex[2]))
                         
                         end_chunk(attr, matl)
                         
+                    attr.write('GEOM'.encode('utf-8'))
+                    with io.BytesIO() as geom:
+                        chunk_ver(geom, 102)
+                        bm = bmesh.new()
+                        bm.from_mesh(mesh)
+                        
+                        bmesh.ops.triangulate(bm, faces=bm.faces)
+                        
+                        verts = []
+                        indices = []
+                        normals = []
+                        facenormals = []
+                        for i, vert in enumerate(bm.verts):
+                            verts.append([vert.co, uv_layer[i].uv]) #vert.index
+                            normals.append(vert.normal)
+                        
+                        for face in bm.faces:
+                            for vert in face.verts:
+                                indices.append(vert.index)
+                            facenormals.append(face.normal)
+                        
+                        #Flags
+                        geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
+                        #Area
+                        area = sum(face.calc_area() for face in bm.faces)
+                        geom.write(struct.pack("<f", area))
+                        #NumVerticies
+                        geom.write(struct.pack("<I", len(verts)))
+                        #NumPrimitives
+                        geom.write(struct.pack("<I", len(bm.faces)))
+                        #NumIndices
+                        geom.write(struct.pack("<I", len(indices)))
+                        #NumFaceNormals
+                        geom.write(struct.pack("<I", len(facenormals)))
+                        #MaxInfluence
+                        geom.write(struct.pack("<I", 0)) #FIX FOR ANIMATION
+                        #Verticies
+                        for vert in verts:
+                            co = vert[0]
+                            texcoord = vert[1]
+                            geom.write(struct.pack("<fff", co[0], co[1], co[2]))
+                            geom.write(struct.pack("<ff", texcoord[0], texcoord[1]))
+                        #Indices
+                        for idx in indices:
+                            geom.write(struct.pack("<H", idx))
+                        #VertexNormals
+                        for normal in normals:
+                            geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                        #FaceNormals
+                        for normal in facenormals:
+                            geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                            
+                        bm.free()
+                        
+                        end_chunk(attr, geom)
                     end_chunk(rf, attr)
+                bpy.data.materials.remove(defaultMaterial)
                 
                 
-                mesh_triangulate(me)
+            rf.write('INFL'.encode('utf-8'))
+            with io.BytesIO() as infl:
+                chunk_ver(infl, 100)
+                #NumBones
+                infl.write(struct.pack("<I", 0))
+                end_chunk(rf, infl)   
                 #me.transform(EXPORT_GLOBAL_MATRIX @ ob_mat)
 
             #with io.BytesIO() as attr:
@@ -153,9 +316,9 @@ def write_file(filepath, objects, depsgraph, scene,
             end_chunk(f, rf)
             
         #fw('IDXM'.encode('utf-8'))
-        
-        
-        
+    #copy images?
+    io_utils.path_reference_copy(copy_set)    
+    print("done")
         
         
         
