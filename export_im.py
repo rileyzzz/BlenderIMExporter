@@ -3,6 +3,7 @@ import io
 import struct
 import bmesh
 import bpy
+import math
 from mathutils import Matrix, Vector, Color
 from bpy_extras import io_utils, node_shader_utils
 import bmesh
@@ -43,9 +44,9 @@ def jet_str(f, str):
     encoded_name = (str + '\0').encode('utf-8')
     f.write(struct.pack("<I", len(encoded_name)))
     f.write(encoded_name)
-    
+
 def texture_file(type, img_path, target_dir):
-    basename = os.path.basename(img_path)
+    basename = os.path.basename(img_path).lower()
     texturepath = target_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
     txtpath = texturepath + ".txt"
     print("write to " + txtpath)
@@ -97,6 +98,7 @@ def write_file(filepath, objects, depsgraph, scene,
     #with ProgressReportSubstep(progress, 2, "IM Export path: %r" % filepath, "IM Export Finished") as subprogress1:
     
     meshes = []
+    hold_meshes = [] #prevent garbage collection of bmeshes
     for obj in objects:
         final = obj.evaluated_get(depsgraph)# if EXPORT_APPLY_MODIFIERS else ob.original
         try:
@@ -109,8 +111,99 @@ def write_file(filepath, objects, depsgraph, scene,
         if len(me.uv_layers) is 0:
             print("Object " + obj.name + " is missing UV coodinates! Skipping.")
             continue
+        uv_layer = me.uv_layers.active.data
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
-        meshes.append([obj, me])
+        
+        bm = bmesh.new()
+        hold_meshes.append(bm)
+        bm.from_mesh(me)
+        bmesh.ops.triangulate(bm, faces=bm.faces)
+        #split the mesh
+        
+#        split_verts = []
+#        split_indices = []
+#        face_normals = []
+#        for face in bm.faces:
+#            face_normals.append(face.normal)
+#            for vert in face.verts:
+#                if vert.index not in split_verts:
+#                    split_verts.append(vert.index)
+#                split_obj.append(vert.index)
+        #split_blocks = []
+#        if len(bm.verts) > 65535:
+#            print("Mesh " + obj.name + "exceeds the vertex limit. Splitting.")
+#            iSubMeshes = (len(bm.verts) // 65535) + 1;
+#            wasCopied = [None] * len(bm.verts)
+#            base = 0
+#            while True:
+#                #clear temp array
+#                if base > 0:
+#                    wasCopied = [None] * len(bm.verts)
+#                    
+#                faces = []
+#                while base < len(bm.faces):
+#                    for vert in bm.faces[base].verts:
+#                        if wasCopied[vert.index] is None:
+#                            wasCopied[vert.index]
+            
+            
+        wasCopied = [None] * len(bm.verts)
+        unique_verts = []
+        indices = []
+        normals = []
+        face_normals = [] #[]
+            
+        #split_faces = []
+        #idx2idxmap = {}
+        print("Processing mesh...")
+        area = 0.0
+        for face in bm.faces:
+            area += face.calc_area()
+            #split_faces.append(face)
+            face_normals.append(face.normal[:])
+            for vert in face.verts:
+                if wasCopied[vert.index] is None:
+                    wasCopied[vert.index] = len(unique_verts)
+                    unique_verts.append([vert.co[:], uv_layer[vert.index].uv[:]])
+                    normals.append(vert.normal[:])
+                indices.append(wasCopied[vert.index])
+                
+            if len(unique_verts) > 65532:
+                #apply and update
+                #ret = bmesh.ops.split(bm, geom=split_faces)
+                #split_blocks.append(ret["geom"])
+                meshes.append([obj,
+                               unique_verts.copy(),
+                               indices.copy(),
+                               normals.copy(),
+                               face_normals.copy(),
+                               area,
+                               uv_layer])
+                
+                unique_verts.clear()
+                indices.clear()
+                normals.clear()
+                face_normals.clear()
+                area = 0.0
+                #split_faces.clear()
+                #idx2idxmap.clear()
+                wasCopied = [None] * len(bm.verts)
+                print("Block split.")
+                
+        #Add remaining verts
+        if len(unique_verts) > 0:
+            meshes.append([obj,
+                           unique_verts.copy(),
+                           indices.copy(),
+                           normals.copy(),
+                           face_normals.copy(),
+                           area,
+                           uv_layer])
+        print("Complete.")
+
+        #bm.free()
+
+        
         
     copy_set = set()
     with open(filepath, "wb") as f:
@@ -143,24 +236,36 @@ def write_file(filepath, objects, depsgraph, scene,
             
             for i, entry in enumerate(meshes):
                 obj = entry[0]
-                mesh = entry[1]
-                
-                uv_layer = mesh.uv_layers.active.data
+                #mesh = entry[1]
+                #uv_layer = entry[2]
+#                [obj,
+#                               unique_verts.copy(),
+#                               indices.copy(),
+#                               normals.copy(),
+#                               face_normals.copy(),
+#                               me.uv_layers.active.data]
+                verts = entry[1]
+                indices = entry[2]
+                normals = entry[3]
+                face_normals = entry[4]
+                area = entry[5]
+                uv_layer = entry[6]
+                #uv_layer = mesh.uv_layers.active.data
                 #mesh_triangulate(mesh)
                 mat = obj.active_material
                 
-                defaultMaterial = bpy.data.materials.new(mesh.name)
+                defaultMaterial = bpy.data.materials.new(obj.name)
                 if mat is None:
                     mat = defaultMaterial
                 
                 rf.write('CHNK'.encode('utf-8'))
                 with io.BytesIO() as attr:
-                    chunk_ver(attr, 101)
+                    chunk_ver(attr, 100)
                     #Chunk ID
                     attr.write(struct.pack("<I", i))
                     attr.write('MATL'.encode('utf-8'))
                     with io.BytesIO() as matl:
-                        chunk_ver(matl, 102)
+                        chunk_ver(matl, 103)
                         #mat = mesh.active_material
                         #Name
                         jet_str(matl, mat.name)
@@ -246,37 +351,42 @@ def write_file(filepath, objects, depsgraph, scene,
                     attr.write('GEOM'.encode('utf-8'))
                     with io.BytesIO() as geom:
                         chunk_ver(geom, 102)
-                        bm = bmesh.new()
-                        bm.from_mesh(mesh)
+                        #bm = bmesh.new()
+                        #bm.from_mesh(mesh)
+                        #bm = mesh
                         
-                        bmesh.ops.triangulate(bm, faces=bm.faces)
                         
-                        verts = []
-                        indices = []
-                        normals = []
-                        facenormals = []
-                        for i, vert in enumerate(bm.verts):
-                            verts.append([vert.co, uv_layer[i].uv]) #vert.index
-                            normals.append(vert.normal)
-                        
-                        for face in bm.faces:
-                            for vert in face.verts:
-                                indices.append(vert.index)
-                            facenormals.append(face.normal)
-                        
+#                        verts = []
+#                        indices = block_indices #[]
+#                        normals = []
+#                        facenormals = [] #[]
+##                        for i, vert in enumerate(bm.verts):
+##                            verts.append([vert.co, uv_layer[i].uv]) #vert.index
+##                            normals.append(vert.normal)
+##                        
+##                        for face in bm.faces:
+##                            for vert in face.verts:
+##                                indices.append(vert.index)
+##                            facenormals.append(face.normal)
+#                        for vert in block_verts:
+#                            verts.append([vert.co, uv_layer[vert.index].uv])
+#                            normals.append(vert.normal)
+#                        for face in block_faces:
+#                            facenormals.append(face.normal)
+
                         #Flags
                         geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
                         #Area
-                        area = sum(face.calc_area() for face in bm.faces)
+                        #area = sum(face.calc_area() for face in bm.faces)
                         geom.write(struct.pack("<f", area))
                         #NumVerticies
                         geom.write(struct.pack("<I", len(verts)))
                         #NumPrimitives
-                        geom.write(struct.pack("<I", len(bm.faces)))
+                        geom.write(struct.pack("<I", len(indices) // 3))
                         #NumIndices
                         geom.write(struct.pack("<I", len(indices)))
                         #NumFaceNormals
-                        geom.write(struct.pack("<I", len(facenormals)))
+                        geom.write(struct.pack("<I", len(face_normals)))
                         #MaxInfluence
                         geom.write(struct.pack("<I", 0)) #FIX FOR ANIMATION
                         #Verticies
@@ -292,7 +402,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         for normal in normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
                         #FaceNormals
-                        for normal in facenormals:
+                        for normal in face_normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
                             
                         bm.free()
