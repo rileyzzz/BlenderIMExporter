@@ -4,6 +4,7 @@ import struct
 import bmesh
 import bpy
 import math
+import mathutils
 from mathutils import Matrix, Vector, Color
 from bpy_extras import io_utils, node_shader_utils
 import bmesh
@@ -96,7 +97,7 @@ def write_file(filepath, objects, depsgraph, scene,
 #            split_obj(split_objects, me)
     
     #with ProgressReportSubstep(progress, 2, "IM Export path: %r" % filepath, "IM Export Finished") as subprogress1:
-    
+
     meshes = []
     hold_meshes = [] #prevent garbage collection of bmeshes
     for obj in objects:
@@ -179,6 +180,7 @@ def write_file(filepath, objects, depsgraph, scene,
 
         #del uv_dict, uv, f_index, uv_index, uv_ls, uv_get, uv_key, uv_val
         
+        vertgroups = obj.vertex_groups
         
         #split into materials
         materials = me.materials
@@ -194,7 +196,6 @@ def write_file(filepath, objects, depsgraph, scene,
             indices = []
             normals = []
             face_normals = [] #[]
-
             area = 0.0
             for face in srcobject:
                 area += face.calc_area()
@@ -206,7 +207,18 @@ def write_file(filepath, objects, depsgraph, scene,
                     vert = loop.vert
                     if wasCopied[vert.index] is None:
                         wasCopied[vert.index] = len(unique_verts)
-                        unique_verts.append([vert.co[:], uv_layer[loop.index].uv[:]])
+                        
+                        influences = []
+                        for group in vertgroups:
+                            try:
+                                weight = group.weight(vert.index)
+                            except RuntimeError:
+                                weight = 0.0
+                            if weight != 0.0:
+                                influences.append([group.name, weight])
+                            
+                        
+                        unique_verts.append([vert.co[:], uv_layer[loop.index].uv[:], influences])
                         normals.append(vert.normal.normalized())
                         #normals.append([0.0, 0.0, 1.0])
                     indices.append(wasCopied[vert.index])
@@ -245,9 +257,18 @@ def write_file(filepath, objects, depsgraph, scene,
         print("Complete.")
 
         #bm.free()
-
-        
-        
+    
+    bones = {}
+    for ob in bpy.data.objects:
+        if ob.type != 'ARMATURE':
+            continue
+        armature = ob.data
+        for bone in armature.bones:
+            if "b.r." in bone.name:
+                #bones.append(bone)
+                #bone, chunk influences
+                bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
+                
     copy_set = set()
     with open(filepath, "wb") as f:
         #fw = f.write
@@ -279,6 +300,7 @@ def write_file(filepath, objects, depsgraph, scene,
             
             
             for i, entry in enumerate(meshes):
+                
                 obj = entry[0]
                 #mesh = entry[1]
                 #uv_layer = entry[2]
@@ -303,7 +325,7 @@ def write_file(filepath, objects, depsgraph, scene,
                 defaultMaterial = bpy.data.materials.new(obj.name)
                 if mat is None:
                     mat = defaultMaterial
-                
+       
                 rf.write('CHNK'.encode('utf-8'))
                 with io.BytesIO() as attr:
                     chunk_ver(attr, 100)
@@ -437,11 +459,22 @@ def write_file(filepath, objects, depsgraph, scene,
                         #MaxInfluence
                         geom.write(struct.pack("<I", 0)) #FIX FOR ANIMATION
                         #Verticies
-                        for vert in verts:
+                        for idx, vert in enumerate(verts):
                             co = vert[0]
                             texcoord = vert[1]
+                            influences = vert[2]
                             geom.write(struct.pack("<fff", co[0], co[1], co[2]))
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
+                            
+                            co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
+                            for influence in influences:
+                                name = influence[0]
+                                weight = influence[1]
+                                if name in bones:
+                                    bonegroup = bones[name]
+                                    bone = bonegroup[0]
+                                    chunkinfl = bonegroup[1][i]
+                                    chunkinfl.append([idx, weight, co_vector @ bone.matrix_local.inverted()])
                         #Indices
                         for idx in indices:
                             geom.write(struct.pack("<H", idx))
@@ -457,13 +490,52 @@ def write_file(filepath, objects, depsgraph, scene,
                         end_chunk(attr, geom)
                     end_chunk(rf, attr)
                 bpy.data.materials.remove(defaultMaterial)
-                
+
                 
             rf.write('INFL'.encode('utf-8'))
             with io.BytesIO() as infl:
                 chunk_ver(infl, 100)
                 #NumBones
-                infl.write(struct.pack("<I", 0))
+                infl.write(struct.pack("<I", len(bones)))
+                #Bones
+                for key in bones:
+                    bonegroup = bones[key]
+                    bone = bonegroup[0]
+                    chunkinfl = bonegroup[1] # per chunk influences
+                    
+                    #Name
+                    jet_str(infl, bone.name)
+                    #Parent
+                    if bone.parent != None:
+                        jet_str(infl, bone.parent.name)
+                    else:
+                        infl.write(struct.pack("<I", 0))
+                    #LocalPosition
+                    infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
+                    #LocalOrientation
+                    infl.write(struct.pack("<fffffffff", *bone.matrix[0], *bone.matrix[1], *bone.matrix[2]))
+                    
+                    necessary_infl = []
+                    for influencelist in chunkinfl:
+                        if len(influencelist) > 0:
+                            necessary_infl.append(influencelist)
+                    
+                    #NumInfluences
+                    infl.write(struct.pack("<I", len(necessary_infl)))
+                    #Influences
+                    for i, influencelist in enumerate(necessary_infl):
+                        #ChunkIndex
+                        infl.write(struct.pack("<I", i))
+                        #NumVertices
+                        infl.write(struct.pack("<I", len(influencelist)))
+                        for influence in influencelist:
+                            #Index
+                            infl.write(struct.pack("<I", influence[0]))
+                            #Weight
+                            infl.write(struct.pack("<f", influence[1]))
+                            #Position
+                            vertpos = influence[2]
+                            infl.write(struct.pack("<fff", vertpos[0], vertpos[1], vertpos[2]))
                 end_chunk(rf, infl)
                 #me.transform(EXPORT_GLOBAL_MATRIX @ ob_mat)
 
