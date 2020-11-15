@@ -66,7 +66,8 @@ def end_chunk(f, chunk):
     f.write(struct.pack("<I", chunk.tell()))
     f.write(chunk.getbuffer())
 
-def recursive_writebone(chnk, srcBone):
+def recursive_writebone(chnk, srcBone, bones_flat):
+    bones_flat.append(srcBone)
     
     relevant_children = []
     for child in srcBone.children:
@@ -82,11 +83,11 @@ def recursive_writebone(chnk, srcBone):
         bone.write(struct.pack("<I", len(relevant_children)))
         #BoneList
         for child in relevant_children:
-            recursive_writebone(bone, child)
+            recursive_writebone(bone, child, bones_flat)
         end_chunk(chnk, bone)
     
     
-def write_kin(filepath, bones):
+def write_kin(filepath, bones, armature):
     print("Writing .kin to " + filepath)
     
     scene = bpy.context.scene
@@ -132,22 +133,46 @@ def write_kin(filepath, bones):
                 evnt.write(struct.pack("<I", 0))
                 end_chunk(rf, evnt)
             
+            bones_flat = []
             
             #Skeleton
             rf.write('SKEL'.encode('utf-8'))
             with io.BytesIO() as skel:
                 chunk_ver(skel, 100)
                 #SkeletonBlock
-                recursive_writebone(skel, root_bone)
+                recursive_writebone(skel, root_bone, bones_flat)
                 #skel.write(struct.pack("<I", 0))
                 end_chunk(rf, skel)
+                
+            posebones_flat = []
+            for bone in bones_flat:
+                print("bone " + bone.name)
+                for posebone in armature.pose.bones:
+                    if posebone.name == bone.name:
+                        posebones_flat.append(posebone)
+                        break
+                #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
+                #posebones_flat.append(pose_bone)
+            print("Found " + str(len(posebones_flat)) + "/" + str(len(armature.pose.bones)) + " pose bones")
+
             #FrameList
             for i in range(NumFrames):
+                scene.frame_set(i)
                 rf.write('FRAM'.encode('utf-8'))
                 with io.BytesIO() as fram:
                     chunk_ver(fram, 100)
-                    
-                    end_chunk(info, fram)
+                    #FrameNum
+                    fram.write(struct.pack("<I", i))
+                    #BoneDataList
+                    for pose_bone in posebones_flat:
+                        mat = pose_bone.matrix_basis
+                        position, rotation, scale = mat.decompose()
+                        #Position
+                        fram.write(struct.pack("<fff", *position))
+                        #Orientation
+                        fram.write(struct.pack("<ffff", *rotation))
+                        
+                    end_chunk(rf, fram)
             
             end_chunk(f, rf)
     
@@ -267,19 +292,26 @@ def write_file(filepath, objects, depsgraph, scene,
 
         #bm.free()
     
+    active_armature = None
     bones = {}
+    
     for ob in bpy.data.objects:
         if ob.type != 'ARMATURE':
             continue
-        armature = ob.data
-        for bone in armature.bones:
+        active_armature = ob
+        break
+    
+    if active_armature is None:
+        print("No armature in scene.")
+        EXPORT_KIN = False
+    else:
+        for bone in active_armature.data.bones:
             if "b.r." in bone.name:
-                #bones.append(bone)
                 #bone, chunk influences
                 bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
-    
+
     if EXPORT_KIN:
-        write_kin(os.path.dirname(filepath) + "\\anim.kin", bones)
+        write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature)
     
     copy_set = set()
     with open(filepath, "wb") as f:
