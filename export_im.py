@@ -200,13 +200,15 @@ def write_file(filepath, objects, depsgraph, scene,
                 area += face.calc_area()
                 
                 #split_faces.append(face)
-                face_normals.append(face.normal[:])
+                face_normals.append(face.normal.normalized())
+                #face_normals.append([0.0, 0.0, 1.0])
                 for loop in face.loops:
                     vert = loop.vert
                     if wasCopied[vert.index] is None:
                         wasCopied[vert.index] = len(unique_verts)
                         unique_verts.append([vert.co[:], uv_layer[loop.index].uv[:]])
-                        normals.append(vert.normal[:])
+                        normals.append(vert.normal.normalized())
+                        #normals.append([0.0, 0.0, 1.0])
                     indices.append(wasCopied[vert.index])
                     
                 if len(unique_verts) > 65532:
@@ -265,7 +267,8 @@ def write_file(filepath, objects, depsgraph, scene,
                 #Position
                 info.write(struct.pack("<fff", objLocation.x, objLocation.y, objLocation.z))
                 #Rotation
-                info.write(struct.pack("<ffff", objRotation.x, objRotation.y, objRotation.z, objRotation.w))
+                #info.write(struct.pack("<ffff", objRotation.x, objRotation.y, objRotation.z, objRotation.w))
+                info.write(struct.pack("<ffff", objRotation.w, objRotation.x, objRotation.y, objRotation.z))
                 #NumAttributes
                 info.write(struct.pack("<I", len(meshes)))
                 #MaxInfluencePerVertex
@@ -309,7 +312,6 @@ def write_file(filepath, objects, depsgraph, scene,
                     attr.write('MATL'.encode('utf-8'))
                     with io.BytesIO() as matl:
                         chunk_ver(matl, 103)
-                        #mat = mesh.active_material
                         #Name
                         jet_str(matl, mat.name)
                         #NumProperties
@@ -320,10 +322,13 @@ def write_file(filepath, objects, depsgraph, scene,
                         
                         #TwoSided
                         matl.write(struct.pack("<I", int(not mat.use_backface_culling)))
+                        #matl.write(struct.pack("<I", 0))
                         #Opacity
                         matl.write(struct.pack("<f", mat_wrap.alpha))
-                        #Ambient mat_wrap.base_color mat_wrap.base_color[:3]
-                        matl.write(struct.pack("<fff", 1.0, 1.0, 1.0))
+                        #Ambient
+                        matl.write(struct.pack("<fff", mat_wrap.base_color[0],
+                                                       mat_wrap.base_color[1],
+                                                       mat_wrap.base_color[2]))
                         #Diffuse
                         matl.write(struct.pack("<fff", mat_wrap.base_color[0],
                                                        mat_wrap.base_color[1],
@@ -345,7 +350,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         #Shininess
                         matl.write(struct.pack("<f", (1.0 - mat_wrap.roughness) * 128.0))
                         #Texture setup
-                        texCount = 0
+                        #texCount = 0
                         textures = []
                         
                         image_source = [
@@ -374,9 +379,8 @@ def write_file(filepath, objects, depsgraph, scene,
                             filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
                                                        path_mode, "", copy_set, image.library)
                             strength = 1.0
-                            if type is "normalmap_texture":
-                                strength = mat_wrap.normalmap_strength
-                            
+                            if entry is "normalmap_texture":
+                                strength = 0.2 * mat_wrap.normalmap_strength
                             textures.append([type, texture_file(type, filepath, dest_dir), strength])
                         
                         #NumTextures
@@ -460,7 +464,7 @@ def write_file(filepath, objects, depsgraph, scene,
                 chunk_ver(infl, 100)
                 #NumBones
                 infl.write(struct.pack("<I", 0))
-                end_chunk(rf, infl)   
+                end_chunk(rf, infl)
                 #me.transform(EXPORT_GLOBAL_MATRIX @ ob_mat)
 
             #with io.BytesIO() as attr:
