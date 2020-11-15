@@ -65,7 +65,93 @@ def chunk_ver(f, ver):
 def end_chunk(f, chunk):
     f.write(struct.pack("<I", chunk.tell()))
     f.write(chunk.getbuffer())
+
+def recursive_writebone(chnk, srcBone):
+    
+    relevant_children = []
+    for child in srcBone.children:
+        if "b.r." in child.name:
+            relevant_children.append(child)
+    
+    chnk.write('BONE'.encode('utf-8'))
+    with io.BytesIO() as bone:
+        chunk_ver(bone, 100)
+        #BoneName
+        jet_str(bone, srcBone.name)
+        #NumChildren
+        bone.write(struct.pack("<I", len(relevant_children)))
+        #BoneList
+        for child in relevant_children:
+            recursive_writebone(bone, child)
+        end_chunk(chnk, bone)
+    
+    
+def write_kin(filepath, bones):
+    print("Writing .kin to " + filepath)
+    
+    scene = bpy.context.scene
+    NumFrames = scene.frame_end - scene.frame_start + 1
+    
+    #preprocess
+    root_bone = None
+    for key in bones:
+        bonegroup = bones[key]
+        bone = bonegroup[0]
+        if bone.parent is None:
+            root_bone = bone
+            break
             
+    if root_bone is None:
+        print("Could not find a root bone!")
+        return
+    
+    with open(filepath, "wb") as f:
+        #JIRF, filesize
+        f.write('JIRF'.encode('utf-8'))
+        with io.BytesIO() as rf: #resource file
+            rf.write('ANIM'.encode('utf-8'))
+
+            rf.write('INFO'.encode('utf-8'))
+            with io.BytesIO() as info:
+                chunk_ver(info, 100)
+                #FileName
+                jet_str(info, os.path.basename(filepath).lower())
+                #NumFrames
+                info.write(struct.pack("<I", NumFrames))
+                #FrameRate
+                info.write(struct.pack("<I", 30))
+                #MetricScale
+                info.write(struct.pack("<f", 1.0))
+                end_chunk(rf, info)
+            
+            #Events
+            rf.write('EVNT'.encode('utf-8'))
+            with io.BytesIO() as evnt:
+                chunk_ver(evnt, 100)
+                #NumEvents
+                evnt.write(struct.pack("<I", 0))
+                end_chunk(rf, evnt)
+            
+            
+            #Skeleton
+            rf.write('SKEL'.encode('utf-8'))
+            with io.BytesIO() as skel:
+                chunk_ver(skel, 100)
+                #SkeletonBlock
+                recursive_writebone(skel, root_bone)
+                #skel.write(struct.pack("<I", 0))
+                end_chunk(rf, skel)
+            #FrameList
+            for i in range(NumFrames):
+                rf.write('FRAM'.encode('utf-8'))
+                with io.BytesIO() as fram:
+                    chunk_ver(fram, 100)
+                    
+                    end_chunk(info, fram)
+            
+            end_chunk(f, rf)
+    
+    
 def write_file(filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_KIN=True,
@@ -75,29 +161,8 @@ def write_file(filepath, objects, depsgraph, scene,
                ):
     if EXPORT_GLOBAL_MATRIX is None:
         EXPORT_GLOBAL_MATRIX = Matrix()
-    
-    
+
     #split objects
-#    split_objects = []
-#    for obj in objects:
-#        final = obj.evaluated_get(depsgraph)# if EXPORT_APPLY_MODIFIERS else ob.original
-#        try:
-#            me = final.to_mesh()
-#        except RuntimeError:
-#            me = None
-
-#        if me is None:
-#            continue
-#        
-#        mesh_triangulate(me)
-#        #me.transform(EXPORT_GLOBAL_MATRIX @ ob_mat)
-#        if(len(me.vertices) < 65535):
-#            split_objects.append(me)
-#        else:
-#            split_obj(split_objects, me)
-    
-    #with ProgressReportSubstep(progress, 2, "IM Export path: %r" % filepath, "IM Export Finished") as subprogress1:
-
     meshes = []
     hold_meshes = [] #prevent garbage collection of bmeshes
     for obj in objects:
@@ -119,67 +184,11 @@ def write_file(filepath, objects, depsgraph, scene,
         hold_meshes.append(bm)
         bm.from_mesh(me)
         bmesh.ops.triangulate(bm, faces=bm.faces)
-        #split the mesh
-        
-#        split_verts = []
-#        split_indices = []
-#        face_normals = []
-#        for face in bm.faces:
-#            face_normals.append(face.normal)
-#            for vert in face.verts:
-#                if vert.index not in split_verts:
-#                    split_verts.append(vert.index)
-#                split_obj.append(vert.index)
-        #split_blocks = []
-#        if len(bm.verts) > 65535:
-#            print("Mesh " + obj.name + "exceeds the vertex limit. Splitting.")
-#            iSubMeshes = (len(bm.verts) // 65535) + 1;
-#            wasCopied = [None] * len(bm.verts)
-#            base = 0
-#            while True:
-#                #clear temp array
-#                if base > 0:
-#                    wasCopied = [None] * len(bm.verts)
-#                    
-#                faces = []
-#                while base < len(bm.faces):
-#                    for vert in bm.faces[base].verts:
-#                        if wasCopied[vert.index] is None:
-#                            wasCopied[vert.index]
-            
-            
-        
-            
+   
         #split_faces = []
         #idx2idxmap = {}
         print("Processing mesh...")
-#        face_index_pairs = [(face, index) for index, face in enumerate(me.polygons)]
-#        uv = f_index = uv_index = uv_key = uv_val = uv_ls = None
 
-#        uv_face_mapping = [None] * len(face_index_pairs)
-
-#        uv_dict = {}
-#        uv_get = uv_dict.get
-#        for f, f_index in face_index_pairs:
-#            uv_ls = uv_face_mapping[f_index] = []
-#            for uv_index, l_index in enumerate(f.loop_indices):
-#                uv = uv_layer[l_index].uv
-#                # include the vertex index in the key so we don't share UV's between vertices,
-#                # allowed by the OBJ spec but can cause issues for other importers, see: T47010.
-
-#                # this works too, shared UV's for all verts
-#                #~ uv_key = veckey2d(uv)
-#                uv_key = loops[l_index].vertex_index, veckey2d(uv)
-
-#                uv_val = uv_get(uv_key)
-#                if uv_val is None:
-#                    uv_val = uv_dict[uv_key] = uv_unique_count
-#                    fw('vt %.6f %.6f\n' % uv[:])
-#                    uv_unique_count += 1
-#                uv_ls.append(uv_val)
-
-        #del uv_dict, uv, f_index, uv_index, uv_ls, uv_get, uv_key, uv_val
-        
         vertgroups = obj.vertex_groups
         
         #split into materials
@@ -268,7 +277,10 @@ def write_file(filepath, objects, depsgraph, scene,
                 #bones.append(bone)
                 #bone, chunk influences
                 bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
-                
+    
+    if EXPORT_KIN:
+        write_kin(os.path.dirname(filepath) + "\\anim.kin", bones)
+    
     copy_set = set()
     with open(filepath, "wb") as f:
         #fw = f.write
