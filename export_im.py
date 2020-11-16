@@ -87,7 +87,7 @@ def recursive_writebone(chnk, srcBone, bones_flat):
         end_chunk(chnk, bone)
     
     
-def write_kin(filepath, bones, armature):
+def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
     print("Writing .kin to " + filepath)
     
     scene = bpy.context.scene
@@ -165,13 +165,14 @@ def write_kin(filepath, bones, armature):
                     fram.write(struct.pack("<I", i))
                     #BoneDataList
                     for pose_bone in posebones_flat:
-                        mat = pose_bone.matrix_basis
+                        #mat = pose_bone.matrix_basis
+                        mat = EXPORT_GLOBAL_MATRIX @ pose_bone.matrix
                         position, rotation, scale = mat.decompose()
                         #Position
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
-                        fram.write(struct.pack("<ffff", *rotation))
-                        
+                        #fram.write(struct.pack("<ffff", *rotation))
+                        fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
                     end_chunk(rf, fram)
             
             end_chunk(f, rf)
@@ -251,7 +252,8 @@ def write_file(filepath, objects, depsgraph, scene,
                             if weight != 0.0:
                                 influences.append([group.name, weight])
                             
-                        
+                        #for infl in influences:
+                            #print("vert infl obj " + obj.name + " " + infl[0] + ": " + str(infl[1]))
                         unique_verts.append([vert.co[:], uv_layer[loop.index].uv[:], influences])
                         normals.append(vert.normal.normalized())
                         #normals.append([0.0, 0.0, 1.0])
@@ -311,7 +313,7 @@ def write_file(filepath, objects, depsgraph, scene,
                 bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
 
     if EXPORT_KIN:
-        write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature)
+        write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
     
     copy_set = set()
     with open(filepath, "wb") as f:
@@ -511,6 +513,8 @@ def write_file(filepath, objects, depsgraph, scene,
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
                             
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
+                            
+                            #BoneTransform = None #identity?
                             for influence in influences:
                                 name = influence[0]
                                 weight = influence[1]
@@ -518,7 +522,26 @@ def write_file(filepath, objects, depsgraph, scene,
                                     bonegroup = bones[name]
                                     bone = bonegroup[0]
                                     chunkinfl = bonegroup[1][i]
-                                    chunkinfl.append([idx, weight, co_vector @ bone.matrix_local.inverted()])
+
+#                                    if BoneTransform == None:
+#                                        BoneTransform = bone.matrix_local * weight
+#                                    else:
+#                                        BoneTransform += bone.matrix_local * weight
+                                    
+                                    boneMat = bone.matrix_local.inverted()
+                                    chunkinfl.append([idx, weight, boneMat @ co_vector]) #boneMat @ co_vector
+                                    
+                            #if BoneTransform == None:
+                                #BoneTransform = mathutils.Matrix.Identity()
+                                
+                            #BoneTransform = EXPORT_GLOBAL_MATRIX @ obj.matrix_world @ BoneTransform
+                            
+                            #inverse_vector = BoneTransform.inverted() @ co_vector
+                            #inverse_vector = co_vector @ BoneTransform.inverted()
+                            
+                            #geom.write(struct.pack("<fff", inverse_vector[0], inverse_vector[1], inverse_vector[2]))
+                            #geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
+                            
                         #Indices
                         for idx in indices:
                             geom.write(struct.pack("<H", idx))
@@ -535,10 +558,11 @@ def write_file(filepath, objects, depsgraph, scene,
                     end_chunk(rf, attr)
                 bpy.data.materials.remove(defaultMaterial)
 
-                
+            
             rf.write('INFL'.encode('utf-8'))
             with io.BytesIO() as infl:
                 chunk_ver(infl, 100)
+                
                 #NumBones
                 infl.write(struct.pack("<I", len(bones)))
                 #Bones
@@ -554,15 +578,30 @@ def write_file(filepath, objects, depsgraph, scene,
                         jet_str(infl, bone.parent.name)
                     else:
                         infl.write(struct.pack("<I", 0))
+                    
+                    if bone.parent == None:
+                        boneMat = bone.matrix_local
+                    else:
+                        boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
+                    boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
+                    #boneMat = bone.matrix_local
+                    loc, rot, scale = boneMat.decompose()
                     #LocalPosition
-                    infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
+                    #infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
+                    infl.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
+                    print("bone " + bone.name + " location: " + str(loc[0]) + " " + str(loc[1]) + " " + str(loc[2]))
+                    #infl.write(struct.pack("<fff", 0.0, 0.0, 5.0))
                     #LocalOrientation
-                    infl.write(struct.pack("<fffffffff", *bone.matrix[0], *bone.matrix[1], *bone.matrix[2]))
+                    print("bone " + bone.name + " rotation: " + str(rot.x) + " " + str(rot.y) + " " + str(rot.z) + " " + str(rot.w))
+                    
+                    rotationMat = rot.to_matrix().transposed()
+                    #rotationMat = rot.to_matrix()
+                    infl.write(struct.pack("<fffffffff", *rotationMat[0], *rotationMat[1], *rotationMat[2]))
                     
                     necessary_infl = []
                     for influencelist in chunkinfl:
-                        if len(influencelist) > 0:
-                            necessary_infl.append(influencelist)
+                        #if len(influencelist) > 0:
+                        necessary_infl.append(influencelist)
                     
                     #NumInfluences
                     infl.write(struct.pack("<I", len(necessary_infl)))
