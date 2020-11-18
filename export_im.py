@@ -166,7 +166,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                     #BoneDataList
                     for pose_bone in posebones_flat:
                         #mat = pose_bone.matrix_basis
-                        mat = EXPORT_GLOBAL_MATRIX @ pose_bone.matrix
+                        mat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world @ pose_bone.matrix
                         position, rotation, scale = mat.decompose()
                         rotation = rotation.inverted()
                         #rotation = mathutils.Quaternion()
@@ -592,7 +592,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         boneMat = bone.matrix_local
                     else:
                         boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-                    boneMat = active_armature.matrix_world @ boneMat #EXPORT_GLOBAL_MATRIX @ 
+                    boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat #EXPORT_GLOBAL_MATRIX @ 
                     #boneMat = bone.matrix_local
                     loc, rot, scale = boneMat.decompose()
                     #rot = mathutils.Quaternion()
