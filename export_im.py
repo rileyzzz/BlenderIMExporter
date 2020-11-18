@@ -168,6 +168,8 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                         #mat = pose_bone.matrix_basis
                         mat = EXPORT_GLOBAL_MATRIX @ pose_bone.matrix
                         position, rotation, scale = mat.decompose()
+                        rotation = rotation.inverted()
+                        #rotation = mathutils.Quaternion()
                         #Position
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
@@ -296,7 +298,7 @@ def write_file(filepath, objects, depsgraph, scene,
     
     active_armature = None
     bones = {}
-    
+    root_bone = None
     for ob in bpy.data.objects:
         if ob.type != 'ARMATURE':
             continue
@@ -311,6 +313,8 @@ def write_file(filepath, objects, depsgraph, scene,
             if "b.r." in bone.name:
                 #bone, chunk influences
                 bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
+                if bone.parent == None:
+                    root_bone = bone
 
     if EXPORT_KIN:
         write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
@@ -509,10 +513,15 @@ def write_file(filepath, objects, depsgraph, scene,
                             co = vert[0]
                             texcoord = vert[1]
                             influences = vert[2]
+                            
                             geom.write(struct.pack("<fff", co[0], co[1], co[2]))
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
                             
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
+#                            co_vector = root_bone.matrix_local.inverted() @ co_vector
+#                            
+#                            geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
+#                            geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
                             
                             #BoneTransform = None #identity?
                             for influence in influences:
@@ -583,9 +592,11 @@ def write_file(filepath, objects, depsgraph, scene,
                         boneMat = bone.matrix_local
                     else:
                         boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-                    boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
+                    boneMat = active_armature.matrix_world @ boneMat #EXPORT_GLOBAL_MATRIX @ 
                     #boneMat = bone.matrix_local
                     loc, rot, scale = boneMat.decompose()
+                    #rot = mathutils.Quaternion()
+                    
                     #LocalPosition
                     #infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
                     infl.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
