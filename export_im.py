@@ -151,10 +151,16 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                     if posebone.name == bone.name:
                         posebones_flat.append(posebone)
                         break
+                    
+            objbones_flat = []
+            for obj in bones_flat:
+                if hasattr(obj, 'type') and obj.type == 'EMPTY':
+                    objbones_flat.append(obj)
+                    
                 #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
                 #posebones_flat.append(pose_bone)
             print("Found " + str(len(posebones_flat)) + "/" + str(len(armature.pose.bones)) + " pose bones")
-
+            print("Found " + str(len(objbones_flat)) + " object bones")
             #FrameList
             for i in range(NumFrames):
                 scene.frame_set(i)
@@ -169,12 +175,24 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                         mat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world @ pose_bone.matrix
                         position, rotation, scale = mat.decompose()
                         rotation = rotation.inverted()
-                        #rotation = mathutils.Quaternion()
                         #Position
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
-                        #fram.write(struct.pack("<ffff", *rotation))
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
+                    
+                    for obj_bone in objbones_flat:
+                        #objMat = obj_bone.matrix_world
+                        #if obj_bone.parent != None:
+                            #objMat = obj_bone.parent.matrix_world.inverted() @ objMat
+                        #objMat = EXPORT_GLOBAL_MATRIX @ objMat
+                        objMat = EXPORT_GLOBAL_MATRIX @ obj_bone.matrix_world
+                        position, rotation, scale = objMat.decompose()
+                        rotation = rotation.inverted()
+                        #Position
+                        fram.write(struct.pack("<fff", *position))
+                        #Orientation
+                        fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
+                    
                     end_chunk(rf, fram)
             
             end_chunk(f, rf)
@@ -212,7 +230,13 @@ def write_file(filepath, objects, depsgraph, scene,
         hold_meshes.append(bm)
         bm.from_mesh(me)
         bmesh.ops.triangulate(bm, faces=bm.faces)
-   
+        
+        objectParent = None #empty and lattice parents
+        if obj.parent != None:
+            if "b.r." in obj.parent.name:
+                objectParent = obj.parent
+        
+        
         #split_faces = []
         #idx2idxmap = {}
         print("Processing mesh...")
@@ -233,6 +257,7 @@ def write_file(filepath, objects, depsgraph, scene,
             indices = []
             normals = []
             face_normals = [] #[]
+            
             area = 0.0
             for face in srcobject:
                 area += face.calc_area()
@@ -271,7 +296,8 @@ def write_file(filepath, objects, depsgraph, scene,
                                    normals.copy(),
                                    face_normals.copy(),
                                    area,
-                                   uv_layer])
+                                   uv_layer,
+                                   objectParent])
                     
                     unique_verts.clear()
                     indices.clear()
@@ -291,7 +317,8 @@ def write_file(filepath, objects, depsgraph, scene,
                                normals.copy(),
                                face_normals.copy(),
                                area,
-                               uv_layer])
+                               uv_layer,
+                               objectParent])
         print("Complete.")
 
         #bm.free()
@@ -307,7 +334,7 @@ def write_file(filepath, objects, depsgraph, scene,
     
     if active_armature is None:
         print("No armature in scene.")
-        EXPORT_KIN = False
+        #EXPORT_KIN = False
     else:
         for bone in active_armature.data.bones:
             if "b.r." in bone.name:
@@ -315,7 +342,15 @@ def write_file(filepath, objects, depsgraph, scene,
                 bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
                 if bone.parent == None:
                     root_bone = bone
-
+    
+    #legacy empty, lattice support
+    for ob in bpy.data.objects:
+        if "b.r." in ob.name:
+            print("Found bone object " + ob.name)
+            bones[ob.name] = [ob, [[] for _ in range(len(meshes))]]
+            if ob.parent == None:
+                root_bone = ob
+    
     if EXPORT_KIN:
         write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
     
@@ -368,6 +403,7 @@ def write_file(filepath, objects, depsgraph, scene,
                 face_normals = entry[5]
                 area = entry[6]
                 uv_layer = entry[7]
+                objParent = entry[8]
                 #uv_layer = mesh.uv_layers.active.data
                 #mesh_triangulate(mesh)
                 #mat = obj.active_material
@@ -469,7 +505,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         
                     attr.write('GEOM'.encode('utf-8'))
                     with io.BytesIO() as geom:
-                        chunk_ver(geom, 102)
+                        chunk_ver(geom, 201)
                         #bm = bmesh.new()
                         #bm.from_mesh(mesh)
                         #bm = mesh
@@ -495,6 +531,9 @@ def write_file(filepath, objects, depsgraph, scene,
 
                         #Flags
                         geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
+                        #UseTangents (201)
+                        geom.write(struct.pack("<I", 0))
+                        
                         #Area
                         #area = sum(face.calc_area() for face in bm.faces)
                         geom.write(struct.pack("<f", area))
@@ -508,20 +547,28 @@ def write_file(filepath, objects, depsgraph, scene,
                         geom.write(struct.pack("<I", len(face_normals)))
                         #MaxInfluence
                         geom.write(struct.pack("<I", 0)) #FIX FOR ANIMATION
-                        #Verticies
+                        
+                        #Parent (201)
+                        if objParent != None:
+                            jet_str(geom, objParent.name)
+                        else:
+                            geom.write(struct.pack("<I", 0))
+                        
+                        #Vertices
                         for idx, vert in enumerate(verts):
                             co = vert[0]
                             texcoord = vert[1]
                             influences = vert[2]
                             
-                            geom.write(struct.pack("<fff", co[0], co[1], co[2]))
-                            geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
+                            #geom.write(struct.pack("<fff", co[0], co[1], co[2]))
+                            #geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
                             
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
-#                            co_vector = root_bone.matrix_local.inverted() @ co_vector
-#                            
-#                            geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
-#                            geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
+                            if objParent != None:
+                                co_vector = objParent.matrix_world.inverted() @ co_vector
+                                                       
+                            geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
+                            geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
                             
                             #BoneTransform = None #identity?
                             for influence in influences:
@@ -588,11 +635,26 @@ def write_file(filepath, objects, depsgraph, scene,
                     else:
                         infl.write(struct.pack("<I", 0))
                     
-                    if bone.parent == None:
-                        boneMat = bone.matrix_local
+                    if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
+                        print("BONE TYPE")
+                        if bone.parent == None:
+                            boneMat = bone.matrix_local
+                        else:
+                            boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
+                        boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
                     else:
-                        boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-                    boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat #EXPORT_GLOBAL_MATRIX @ 
+                        print("NOT BONE TYPE")
+                        boneMat = bone.matrix_local
+                        #boneMat = mathutils.Matrix.Identity(4)
+#                        if bone.parent == None:
+#                            print("no parent")
+#                            boneMat = bone.matrix_world
+#                        else:
+#                            print("bone " + bone.name + " parent " + bone.parent.name)
+#                            #boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
+#                            boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                        boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+
                     #boneMat = bone.matrix_local
                     loc, rot, scale = boneMat.decompose()
                     #rot = mathutils.Quaternion()
