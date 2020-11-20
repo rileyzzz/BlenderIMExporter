@@ -154,7 +154,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                     
             objbones_flat = []
             for obj in bones_flat:
-                if hasattr(obj, 'type') and obj.type == 'EMPTY':
+                if hasattr(obj, 'type') and obj.type == 'EMPTY' or obj.type == 'LATTICE':
                     objbones_flat.append(obj)
                     
                 #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
@@ -213,6 +213,7 @@ def write_file(filepath, objects, depsgraph, scene,
     hold_meshes = [] #prevent garbage collection of bmeshes
     for obj in objects:
         final = obj.evaluated_get(depsgraph)# if EXPORT_APPLY_MODIFIERS else ob.original
+        
         try:
             me = final.to_mesh()
         except RuntimeError:
@@ -347,12 +348,22 @@ def write_file(filepath, objects, depsgraph, scene,
     for ob in bpy.data.objects:
         if "b.r." in ob.name:
             print("Found bone object " + ob.name)
+            #ob.scale = [1.0, 1.0, 1.0]
+            #bpy.context.view_layer.update()
             bones[ob.name] = [ob, [[] for _ in range(len(meshes))]]
             if ob.parent == None:
                 root_bone = ob
     
     if EXPORT_KIN:
         write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
+    
+    #Attachment setup
+    attachments = []
+    for ob in bpy.data.objects:
+        if ob.type == 'EMPTY' and 'a.' in ob.name:
+            print("Attachment " + ob.name)
+            attachments.append(ob)
+    
     
     copy_set = set()
     with open(filepath, "wb") as f:
@@ -466,7 +477,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             "base_color_texture", #TEX_Diffuse
                             "specular_texture", #TEX_Specular
                             "roughness_texture", #TEX_Shine
-                            None, #TEX_Shinestrength
+                            "normalmap_texture" if mat.name.endswith(".m.tbumptex") else None, #TEX_Shinestrength
                             "emission_color_texture" if emission_strength != 0.0 else None, #TEX_Selfillum
                             "alpha_texture", #TEX_Opacity
                             None, #TEX_Filtercolor
@@ -565,7 +576,8 @@ def write_file(filepath, objects, depsgraph, scene,
                             
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
                             if objParent != None:
-                                co_vector = objParent.matrix_world.inverted() @ co_vector
+                                parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
+                                co_vector = parentMat.inverted() @ co_vector
                                                        
                             geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
@@ -644,15 +656,15 @@ def write_file(filepath, objects, depsgraph, scene,
                         boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
                     else:
                         print("NOT BONE TYPE")
-                        boneMat = bone.matrix_local
+                        #boneMat = bone.matrix_local
                         #boneMat = mathutils.Matrix.Identity(4)
-#                        if bone.parent == None:
-#                            print("no parent")
-#                            boneMat = bone.matrix_world
-#                        else:
-#                            print("bone " + bone.name + " parent " + bone.parent.name)
-#                            #boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-#                            boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                        if bone.parent == None:
+                            print("no parent")
+                            boneMat = bone.matrix_world
+                        else:
+                            print("bone " + bone.name + " parent " + bone.parent.name)
+                            #boneMat = bone.parent.matrix_world.inverted() @ bone.matrix_world
+                            boneMat = bone.matrix_parent_inverse @ bone.matrix_world
                         boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
 
                     #boneMat = bone.matrix_local
@@ -693,6 +705,30 @@ def write_file(filepath, objects, depsgraph, scene,
                             vertpos = influence[2]
                             infl.write(struct.pack("<fff", vertpos[0], vertpos[1], vertpos[2]))
                 end_chunk(rf, infl)
+                
+            #AttachmentInfo
+            if len(attachments) > 0:
+                rf.write('ATCH'.encode('utf-8'))
+                with io.BytesIO() as atch:
+                    chunk_ver(atch, 100)
+                    #NumAttachments
+                    atch.write(struct.pack("<I", len(attachments)))
+                    #Attachments
+                    for att in attachments:
+                        #Name
+                        jet_str(atch, att.name)
+                        
+                        attMat = EXPORT_GLOBAL_MATRIX @ att.matrix_world
+                        loc, rot, scale = attMat.decompose()
+                        rotationMat = rot.to_matrix().transposed()
+                        #Orientation
+                        atch.write(struct.pack("<fffffffff", *rotationMat[0], *rotationMat[1], *rotationMat[2]))
+                        #Position
+                        atch.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
+                        
+                    end_chunk(rf, atch)
+                
+                
                 #me.transform(EXPORT_GLOBAL_MATRIX @ ob_mat)
 
             #with io.BytesIO() as attr:
