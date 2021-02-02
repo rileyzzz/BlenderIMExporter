@@ -18,7 +18,7 @@ def name_compat(name):
         return 'None'
     else:
         return name.replace(' ', '_')
-    
+
 def mesh_triangulate(me):
     #import bmesh
     bm = bmesh.new()
@@ -26,6 +26,9 @@ def mesh_triangulate(me):
     bmesh.ops.triangulate(bm, faces=bm.faces)
     bm.to_mesh(me)
     bm.free()
+
+def veckey2d(v):
+    return round(v[0], 4), round(v[1], 4)
 
 #def split_obj(split_objects, obj):
 #    print("Too many vertices on object " + obj.name + "! Splitting.")
@@ -36,11 +39,11 @@ def mesh_triangulate(me):
 #        bm.from_mesh(me)
 #        #new_obj.data = obj.data.copy()
 #        bm.vertices = obj.vertices[baseIndex : baseIndex + 65535]
-#        
-        
+#
+
     #new_obj = src_obj.copy()
     #new_obj.data = src_obj.data.copy()
-    
+
 def jet_str(f, str):
     encoded_name = (str + '\0').encode('utf-8')
     f.write(struct.pack("<I", len(encoded_name)))
@@ -58,7 +61,7 @@ def texture_file(type, img_path, target_dir):
         if type is 8:
             f.write("NormalMapHint=normalmap")
     return texturepath
-    
+
 def chunk_ver(f, ver):
     f.write(struct.pack("<I", ver))
 
@@ -68,12 +71,12 @@ def end_chunk(f, chunk):
 
 def recursive_writebone(chnk, srcBone, bones_flat):
     bones_flat.append(srcBone)
-    
+
     relevant_children = []
     for child in srcBone.children:
         if "b.r." in child.name:
             relevant_children.append(child)
-    
+
     chnk.write('BONE'.encode('utf-8'))
     with io.BytesIO() as bone:
         chunk_ver(bone, 100)
@@ -85,14 +88,14 @@ def recursive_writebone(chnk, srcBone, bones_flat):
         for child in relevant_children:
             recursive_writebone(bone, child, bones_flat)
         end_chunk(chnk, bone)
-    
-    
+
+
 def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
     print("Writing .kin to " + filepath)
-    
+
     scene = bpy.context.scene
     NumFrames = scene.frame_end - scene.frame_start + 1
-    
+
     #preprocess
     root_bone = None
     for key in bones:
@@ -101,11 +104,11 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
         if bone.parent is None:
             root_bone = bone
             break
-            
+
     if root_bone is None:
         print("Could not find a root bone!")
         return
-    
+
     with open(filepath, "wb") as f:
         #JIRF, filesize
         f.write('JIRF'.encode('utf-8'))
@@ -124,7 +127,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 #MetricScale
                 info.write(struct.pack("<f", 1.0))
                 end_chunk(rf, info)
-            
+
             #Events
             rf.write('EVNT'.encode('utf-8'))
             with io.BytesIO() as evnt:
@@ -132,9 +135,9 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 #NumEvents
                 evnt.write(struct.pack("<I", 0))
                 end_chunk(rf, evnt)
-            
+
             bones_flat = []
-            
+
             #Skeleton
             rf.write('SKEL'.encode('utf-8'))
             with io.BytesIO() as skel:
@@ -143,7 +146,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 recursive_writebone(skel, root_bone, bones_flat)
                 #skel.write(struct.pack("<I", 0))
                 end_chunk(rf, skel)
-                
+
             posebones_flat = []
             for bone in bones_flat:
                 print("bone " + bone.name)
@@ -151,12 +154,12 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                     if posebone.name == bone.name:
                         posebones_flat.append(posebone)
                         break
-                    
+
             objbones_flat = []
             for obj in bones_flat:
                 if hasattr(obj, 'type') and obj.type == 'EMPTY' or obj.type == 'LATTICE':
                     objbones_flat.append(obj)
-                    
+
                 #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
                 #posebones_flat.append(pose_bone)
             print("Found " + str(len(posebones_flat)) + "/" + str(len(armature.pose.bones)) + " pose bones")
@@ -179,7 +182,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
-                    
+
                     for obj_bone in objbones_flat:
                         #objMat = obj_bone.matrix_world
                         #if obj_bone.parent != None:
@@ -192,12 +195,12 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
-                    
+
                     end_chunk(rf, fram)
-            
+
             end_chunk(f, rf)
-    
-    
+
+
 def write_file(filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_KIN=True,
@@ -213,7 +216,7 @@ def write_file(filepath, objects, depsgraph, scene,
     hold_meshes = [] #prevent garbage collection of bmeshes
     for obj in objects:
         final = obj.evaluated_get(depsgraph)# if EXPORT_APPLY_MODIFIERS else ob.original
-        
+
         try:
             me = final.to_mesh()
         except RuntimeError:
@@ -224,69 +227,81 @@ def write_file(filepath, objects, depsgraph, scene,
         if len(me.uv_layers) is 0:
             print("Object " + obj.name + " is missing UV coodinates! Skipping.")
             continue
-        uv_layer = me.uv_layers.active.data[:]
+
+        #uv_layer = me.uv_layers.active.data
+        mesh_triangulate(me)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
+        uv_layer = me.uv_layers.active.data[:]
+
         me.calc_normals_split() #unsure
-        bm = bmesh.new()
-        hold_meshes.append(bm)
-        bm.from_mesh(me)
-        bmesh.ops.triangulate(bm, faces=bm.faces)
-        
+
+        #bm = bmesh.new()
+        #hold_meshes.append(bm)
+        #bm.from_mesh(me)
+        #bmesh.ops.triangulate(bm, faces=bm.faces)
+
+
         objectParent = None #empty and lattice parents
         if obj.parent != None:
             if "b.r." in obj.parent.name:
                 objectParent = obj.parent
-        
-        
+
+
         #split_faces = []
         #idx2idxmap = {}
         print("Processing mesh...")
 
         vertgroups = obj.vertex_groups
-        
+
         #split into materials
         materials = me.materials
         print("object contains " + str(len(materials)) + " materials")
         #split_matblocks = [None] * len(materials)
         split_matblocks = [[] for i in range(len(materials))]
-        for face in bm.faces:
+        for face in me.polygons:
             split_matblocks[face.material_index].append(face)
-        
+
         for i, srcobject in enumerate(split_matblocks):
-            wasCopied = [None] * len(bm.verts)
+            wasCopied = [None] * len(me.vertices)
             unique_verts = []
             indices = []
             normals = []
             face_normals = [] #[]
-            
+
             area = 0.0
             for face in srcobject:
-                area += face.calc_area()
-                
+                area += face.area
+
                 #split_faces.append(face)
-                face_normals.append(face.normal.normalized())
+                face_normals.append(face.normal)
                 #face_normals.append([0.0, 0.0, 1.0])
-                for loop in face.loops:
-                    vert = loop.vert
-                    if wasCopied[vert.index] is None:
-                        wasCopied[vert.index] = len(unique_verts)
-                        
+
+                for uv_index, l_index in enumerate(face.loop_indices):
+                    loop = me.loops[l_index]
+                    vert = me.vertices[loop.vertex_index]
+                    #vert = loop.vert
+                    if wasCopied[loop.vertex_index] is None:
+                        wasCopied[loop.vertex_index] = len(unique_verts)
+
+                        #uv = uv_layer[l_index].uv
+                        #uv_key = loop.vertex_index, veckey2d(uv)
+
                         influences = []
                         for group in vertgroups:
                             try:
-                                weight = group.weight(vert.index)
+                                weight = group.weight(loop.vertex_index)
                             except RuntimeError:
                                 weight = 0.0
                             if weight != 0.0:
                                 influences.append([group.name, weight])
-                            
+
                         #for infl in influences:
                             #print("vert infl obj " + obj.name + " " + infl[0] + ": " + str(infl[1]))
-                        unique_verts.append([vert.co[:], uv_layer[loop.index].uv[:], influences])
+                        unique_verts.append([vert.co[:], uv_layer[l_index].uv[:], influences])
                         normals.append(vert.normal.normalized())
                         #normals.append([0.0, 0.0, 1.0])
-                    indices.append(wasCopied[vert.index])
-                    
+                    indices.append(wasCopied[loop.vertex_index])
+
                 if len(unique_verts) > 65532:
                     #apply and update
                     #ret = bmesh.ops.split(bm, geom=split_faces)
@@ -299,7 +314,7 @@ def write_file(filepath, objects, depsgraph, scene,
                                    area,
                                    uv_layer,
                                    objectParent])
-                    
+
                     unique_verts.clear()
                     indices.clear()
                     normals.clear()
@@ -309,7 +324,7 @@ def write_file(filepath, objects, depsgraph, scene,
                     #idx2idxmap.clear()
                     wasCopied = [None] * len(bm.verts)
                     print("Block split.")
-                    
+
             #Add remaining verts
             if len(unique_verts) > 0:
                 meshes.append([obj, materials[i],
@@ -323,7 +338,7 @@ def write_file(filepath, objects, depsgraph, scene,
         print("Complete.")
 
         #bm.free()
-    
+
     active_armature = None
     bones = {}
     root_bone = None
@@ -332,7 +347,7 @@ def write_file(filepath, objects, depsgraph, scene,
             continue
         active_armature = ob
         break
-    
+
     if active_armature is None:
         print("No armature in scene.")
         #EXPORT_KIN = False
@@ -343,7 +358,7 @@ def write_file(filepath, objects, depsgraph, scene,
                 bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
                 if bone.parent == None:
                     root_bone = bone
-    
+
     #legacy empty, lattice support
     for ob in bpy.data.objects:
         if "b.r." in ob.name:
@@ -353,30 +368,30 @@ def write_file(filepath, objects, depsgraph, scene,
             bones[ob.name] = [ob, [[] for _ in range(len(meshes))]]
             if ob.parent == None:
                 root_bone = ob
-    
+
     if EXPORT_KIN:
         write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
-    
+
     #Attachment setup
     attachments = []
     for ob in bpy.data.objects:
         if ob.type == 'EMPTY' and 'a.' in ob.name:
             print("Attachment " + ob.name)
             attachments.append(ob)
-    
-    
+
+
     copy_set = set()
     with open(filepath, "wb") as f:
         #fw = f.write
         source_dir = os.path.dirname(bpy.data.filepath)
         dest_dir = os.path.dirname(filepath)
         path_mode = 'AUTO'
-        
+
         #JIRF, filesize
         f.write('JIRF'.encode('utf-8'))
         with io.BytesIO() as rf: #resource file
             rf.write('IDXM'.encode('utf-8'))
-            
+
             rf.write('INFO'.encode('utf-8'))
             with io.BytesIO() as info:
                 chunk_ver(info, 102)
@@ -393,10 +408,10 @@ def write_file(filepath, objects, depsgraph, scene,
                 #MaxInfluencePerChunk
                 info.write(struct.pack("<I", 0))
                 end_chunk(rf, info)
-            
-            
+
+
             for i, entry in enumerate(meshes):
-                
+
                 obj = entry[0]
                 #mesh = entry[1]
                 #uv_layer = entry[2]
@@ -418,11 +433,11 @@ def write_file(filepath, objects, depsgraph, scene,
                 #uv_layer = mesh.uv_layers.active.data
                 #mesh_triangulate(mesh)
                 #mat = obj.active_material
-                
+
                 defaultMaterial = bpy.data.materials.new(obj.name)
                 if mat is None:
                     mat = defaultMaterial
-       
+
                 rf.write('CHNK'.encode('utf-8'))
                 with io.BytesIO() as attr:
                     chunk_ver(attr, 100)
@@ -435,10 +450,10 @@ def write_file(filepath, objects, depsgraph, scene,
                         jet_str(matl, mat.name)
                         #NumProperties
                         matl.write(struct.pack("<I", 0))
-                        
+
                         #nodes
                         mat_wrap = node_shader_utils.PrincipledBSDFWrapper(mat)
-                        
+
                         #TwoSided
                         matl.write(struct.pack("<I", int(not mat.use_backface_culling)))
                         #matl.write(struct.pack("<I", 0))
@@ -461,7 +476,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             emission_strength = mat_wrap.emission_strength
                         else:
                             emission_strength = 1.0
-                        
+
                         emission = [emission_strength * c for c in mat_wrap.emission_color[:3]]
                         matl.write(struct.pack("<fff", emission[0],
                                                        emission[1],
@@ -471,7 +486,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         #Texture setup
                         #texCount = 0
                         textures = []
-                        
+
                         image_source = [
                             None, #TEX_Ambient
                             "base_color_texture", #TEX_Diffuse
@@ -484,7 +499,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             "normalmap_texture", #TEX_Bump,
                             "metallic_texture", #TEX_Reflect,
                             "ior_texture", #TEX_Refract,
-                            None, #TEX_Displacement    
+                            None, #TEX_Displacement
                             ]
                         for type, entry in enumerate(image_source):
                             if entry is None:
@@ -501,7 +516,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             if entry is "normalmap_texture":
                                 strength = 0.2 * mat_wrap.normalmap_strength
                             textures.append([type, texture_file(type, filepath, dest_dir), strength])
-                        
+
                         #NumTextures
                         matl.write(struct.pack("<I", len(textures)))
                         for tex in textures:
@@ -511,17 +526,17 @@ def write_file(filepath, objects, depsgraph, scene,
                             jet_str(matl, tex[1])
                             #Amount
                             matl.write(struct.pack("<f", tex[2]))
-                        
+
                         end_chunk(attr, matl)
-                        
+
                     attr.write('GEOM'.encode('utf-8'))
                     with io.BytesIO() as geom:
                         chunk_ver(geom, 201)
                         #bm = bmesh.new()
                         #bm.from_mesh(mesh)
                         #bm = mesh
-                        
-                        
+
+
 #                        verts = []
 #                        indices = block_indices #[]
 #                        normals = []
@@ -529,7 +544,7 @@ def write_file(filepath, objects, depsgraph, scene,
 ##                        for i, vert in enumerate(bm.verts):
 ##                            verts.append([vert.co, uv_layer[i].uv]) #vert.index
 ##                            normals.append(vert.normal)
-##                        
+##
 ##                        for face in bm.faces:
 ##                            for vert in face.verts:
 ##                                indices.append(vert.index)
@@ -544,7 +559,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
                         #UseTangents (201)
                         geom.write(struct.pack("<I", 0))
-                        
+
                         #Area
                         #area = sum(face.calc_area() for face in bm.faces)
                         geom.write(struct.pack("<f", area))
@@ -558,30 +573,30 @@ def write_file(filepath, objects, depsgraph, scene,
                         geom.write(struct.pack("<I", len(face_normals)))
                         #MaxInfluence
                         geom.write(struct.pack("<I", 0)) #FIX FOR ANIMATION
-                        
+
                         #Parent (201)
                         if objParent != None:
                             jet_str(geom, objParent.name)
                         else:
                             geom.write(struct.pack("<I", 0))
-                        
+
                         #Vertices
                         for idx, vert in enumerate(verts):
                             co = vert[0]
                             texcoord = vert[1]
                             influences = vert[2]
-                            
+
                             #geom.write(struct.pack("<fff", co[0], co[1], co[2]))
                             #geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
-                            
+
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
                             if objParent != None:
                                 parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
                                 co_vector = parentMat.inverted() @ co_vector
-                                                       
+
                             geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
-                            
+
                             #BoneTransform = None #identity?
                             for influence in influences:
                                 name = influence[0]
@@ -595,21 +610,21 @@ def write_file(filepath, objects, depsgraph, scene,
 #                                        BoneTransform = bone.matrix_local * weight
 #                                    else:
 #                                        BoneTransform += bone.matrix_local * weight
-                                    
+
                                     boneMat = bone.matrix_local.inverted()
                                     chunkinfl.append([idx, weight, boneMat @ co_vector]) #boneMat @ co_vector
-                                    
+
                             #if BoneTransform == None:
                                 #BoneTransform = mathutils.Matrix.Identity()
-                                
+
                             #BoneTransform = EXPORT_GLOBAL_MATRIX @ obj.matrix_world @ BoneTransform
-                            
+
                             #inverse_vector = BoneTransform.inverted() @ co_vector
                             #inverse_vector = co_vector @ BoneTransform.inverted()
-                            
+
                             #geom.write(struct.pack("<fff", inverse_vector[0], inverse_vector[1], inverse_vector[2]))
                             #geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
-                            
+
                         #Indices
                         for idx in indices:
                             geom.write(struct.pack("<H", idx))
@@ -619,18 +634,18 @@ def write_file(filepath, objects, depsgraph, scene,
                         #FaceNormals
                         for normal in face_normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
-                            
-                        bm.free()
-                        
+
+                        #bm.free()
+
                         end_chunk(attr, geom)
                     end_chunk(rf, attr)
                 bpy.data.materials.remove(defaultMaterial)
 
-            
+
             rf.write('INFL'.encode('utf-8'))
             with io.BytesIO() as infl:
                 chunk_ver(infl, 100)
-                
+
                 #NumBones
                 infl.write(struct.pack("<I", len(bones)))
                 #Bones
@@ -638,7 +653,7 @@ def write_file(filepath, objects, depsgraph, scene,
                     bonegroup = bones[key]
                     bone = bonegroup[0]
                     chunkinfl = bonegroup[1] # per chunk influences
-                    
+
                     #Name
                     jet_str(infl, bone.name)
                     #Parent
@@ -646,7 +661,7 @@ def write_file(filepath, objects, depsgraph, scene,
                         jet_str(infl, bone.parent.name)
                     else:
                         infl.write(struct.pack("<I", 0))
-                    
+
                     if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
                         print("BONE TYPE")
                         if bone.parent == None:
@@ -670,7 +685,7 @@ def write_file(filepath, objects, depsgraph, scene,
                     #boneMat = bone.matrix_local
                     loc, rot, scale = boneMat.decompose()
                     #rot = mathutils.Quaternion()
-                    
+
                     #LocalPosition
                     #infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
                     infl.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
@@ -678,16 +693,16 @@ def write_file(filepath, objects, depsgraph, scene,
                     #infl.write(struct.pack("<fff", 0.0, 0.0, 5.0))
                     #LocalOrientation
                     print("bone " + bone.name + " rotation: " + str(rot.x) + " " + str(rot.y) + " " + str(rot.z) + " " + str(rot.w))
-                    
+
                     rotationMat = rot.to_matrix().transposed()
                     #rotationMat = rot.to_matrix()
                     infl.write(struct.pack("<fffffffff", *rotationMat[0], *rotationMat[1], *rotationMat[2]))
-                    
+
                     necessary_infl = []
                     for influencelist in chunkinfl:
                         #if len(influencelist) > 0:
                         necessary_infl.append(influencelist)
-                    
+
                     #NumInfluences
                     infl.write(struct.pack("<I", len(necessary_infl)))
                     #Influences
@@ -705,7 +720,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             vertpos = influence[2]
                             infl.write(struct.pack("<fff", vertpos[0], vertpos[1], vertpos[2]))
                 end_chunk(rf, infl)
-                
+
             #AttachmentInfo
             if len(attachments) > 0:
                 rf.write('ATCH'.encode('utf-8'))
@@ -717,7 +732,7 @@ def write_file(filepath, objects, depsgraph, scene,
                     for att in attachments:
                         #Name
                         jet_str(atch, att.name)
-                        
+
                         attMat = EXPORT_GLOBAL_MATRIX @ att.matrix_world
                         loc, rot, scale = attMat.decompose()
                         rotationMat = rot.to_matrix().transposed()
@@ -725,25 +740,25 @@ def write_file(filepath, objects, depsgraph, scene,
                         atch.write(struct.pack("<fffffffff", *rotationMat[0], *rotationMat[1], *rotationMat[2]))
                         #Position
                         atch.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
-                        
+
                     end_chunk(rf, atch)
-                
-                
+
+
                 #me.transform(EXPORT_GLOBAL_MATRIX @ ob_mat)
 
             #with io.BytesIO() as attr:
-                
+
             #for i, ob_main in enumerate(objects):
             end_chunk(f, rf)
-            
+
         #fw('IDXM'.encode('utf-8'))
     #copy images?
-    io_utils.path_reference_copy(copy_set)    
+    io_utils.path_reference_copy(copy_set)
     print("done")
-        
-        
-        
-            
+
+
+
+
 def _write(context, filepath,
            EXPORT_APPLY_MODIFIERS,
            EXPORT_KIN,
@@ -766,7 +781,7 @@ def _write(context, filepath,
     #else:
         #objects = scene.objects
     objects = scene.objects
-    
+
     #orig_frame = scene.frame_current
     full_path = ''.join(context_name)
         # EXPORT THE FILE.
