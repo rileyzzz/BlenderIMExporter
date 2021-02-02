@@ -483,7 +483,7 @@ def write_file(filepath, objects, depsgraph, scene,
                             None, #TEX_Filtercolor
                             "normalmap_texture", #TEX_Bump,
                             "metallic_texture", #TEX_Reflect,
-                            None, #TEX_Refract,
+                            "ior_texture", #TEX_Refract,
                             None, #TEX_Displacement    
                             ]
                         for type, entry in enumerate(image_source):
