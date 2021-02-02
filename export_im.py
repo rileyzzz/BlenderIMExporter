@@ -342,7 +342,7 @@ def write_file(filepath, objects, depsgraph, scene,
     active_armature = None
     bones = {}
     root_bone = None
-    for ob in bpy.data.objects:
+    for ob in objects:
         if ob.type != 'ARMATURE':
             continue
         active_armature = ob
@@ -360,7 +360,7 @@ def write_file(filepath, objects, depsgraph, scene,
                     root_bone = bone
 
     #legacy empty, lattice support
-    for ob in bpy.data.objects:
+    for ob in objects:
         if "b.r." in ob.name:
             print("Found bone object " + ob.name)
             #ob.scale = [1.0, 1.0, 1.0]
@@ -374,7 +374,7 @@ def write_file(filepath, objects, depsgraph, scene,
 
     #Attachment setup
     attachments = []
-    for ob in bpy.data.objects:
+    for ob in objects:
         if ob.type == 'EMPTY' and 'a.' in ob.name:
             print("Attachment " + ob.name)
             attachments.append(ob)
