@@ -215,7 +215,7 @@ def write_file(filepath, objects, depsgraph, scene,
     meshes = []
     hold_meshes = [] #prevent garbage collection of bmeshes
     for obj in objects:
-        final = obj.evaluated_get(depsgraph)# if EXPORT_APPLY_MODIFIERS else ob.original
+        final = obj.evaluated_get(depsgraph) if EXPORT_APPLY_MODIFIERS else obj.original
 
         try:
             me = final.to_mesh()
@@ -776,11 +776,11 @@ def _write(context, filepath,
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    #if EXPORT_SEL_ONLY:
-        #objects = context.selected_objects
-    #else:
-        #objects = scene.objects
-    objects = scene.objects
+    if EXPORT_SEL_ONLY:
+        objects = context.selected_objects
+    else:
+        objects = scene.objects
+    #objects = scene.objects
 
     #orig_frame = scene.frame_current
     full_path = ''.join(context_name)
