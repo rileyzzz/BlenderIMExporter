@@ -203,9 +203,11 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
 
 def write_file(filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
+               EXPORT_TEXTURETXT=True,
                EXPORT_KIN=True,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
+               EXPORT_PATH_MODE='AUTO',
                #progress=ProgressReport(),
                ):
     if EXPORT_GLOBAL_MATRIX is None:
@@ -385,7 +387,6 @@ def write_file(filepath, objects, depsgraph, scene,
         #fw = f.write
         source_dir = os.path.dirname(bpy.data.filepath)
         dest_dir = os.path.dirname(filepath)
-        path_mode = 'AUTO'
 
         #JIRF, filesize
         f.write('JIRF'.encode('utf-8'))
@@ -511,11 +512,17 @@ def write_file(filepath, objects, depsgraph, scene,
                             if image is None:
                                 continue
                             filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
-                                                       path_mode, "", copy_set, image.library)
+                                                       EXPORT_PATH_MODE, "", copy_set, image.library)
                             strength = 1.0
                             if entry is "normalmap_texture":
                                 strength = 0.2 * mat_wrap.normalmap_strength
-                            textures.append([type, texture_file(type, filepath, dest_dir), strength])
+                            if EXPORT_TEXTURETXT:
+                                texturepath = texture_file(type, filepath, dest_dir)
+                            else:
+                                basename = os.path.basename(filepath).lower()
+                                texturepath = dest_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
+
+                            textures.append([type, texturepath, strength])
 
                         #NumTextures
                         matl.write(struct.pack("<I", len(textures)))
@@ -761,9 +768,11 @@ def write_file(filepath, objects, depsgraph, scene,
 
 def _write(context, filepath,
            EXPORT_APPLY_MODIFIERS,
+           EXPORT_TEXTURETXT,
            EXPORT_KIN,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
+           EXPORT_PATH_MODE,
            ):
 
     base_name, ext = os.path.splitext(filepath)
@@ -787,9 +796,11 @@ def _write(context, filepath,
         # EXPORT THE FILE.
     write_file(full_path, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS,
+               EXPORT_TEXTURETXT,
                EXPORT_KIN,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
+               EXPORT_PATH_MODE,
                #progress,
                )
 
@@ -800,6 +811,7 @@ def save(context,
          *,
          use_selection=False,
          use_mesh_modifiers=True,
+         use_texturetxt=True,
          use_kin=True,
          global_matrix=None,
          path_mode='AUTO'
@@ -807,9 +819,11 @@ def save(context,
 
     _write(context, filepath,
            EXPORT_APPLY_MODIFIERS=use_mesh_modifiers,
+           EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_KIN=use_kin,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
+           EXPORT_PATH_MODE=path_mode,
            )
 
     return {'FINISHED'}

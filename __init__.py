@@ -80,6 +80,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=True,
             )
 
+    use_texturetxt: BoolProperty(
+            name="Export texture.txt",
+            description="Write out a texture.txt for each used texture",
+            default=True,
+            )
+
     use_kin: BoolProperty(
             name="Export Animation",
             description="Write out the kin file",
@@ -145,7 +151,7 @@ class IM_PT_export_include(bpy.types.Panel):
         col.prop(operator, 'use_selection')
 
         layout.separator()
-
+        layout.prop(operator, 'use_texturetxt')
         layout.prop(operator, 'use_kin')
 
 
@@ -172,6 +178,7 @@ class IM_PT_export_geometry(bpy.types.Panel):
 
         layout.prop(operator, 'use_mesh_modifiers')
         layout.prop(operator, 'global_scale')
+        layout.prop(operator, 'path_mode')
         #layout.prop(operator, 'use_triangles')
 
 
