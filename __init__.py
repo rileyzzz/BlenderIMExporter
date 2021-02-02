@@ -18,12 +18,12 @@
 
 
 bl_info = {
-    "name": "Indexed Mesh format",
+    "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 0, 0),
-    "blender": (2, 90, 1),
+    "version": (1, 1, 0),
+    "blender": (2, 81, 6),
     "location": "File > Export",
-    "description": "Export Trainz Indexed Meshes",
+    "description": "Export Trainz indexed meshes",
     "warning": "",
     "doc_url": "",
     "support": 'COMMUNITY',
@@ -50,7 +50,7 @@ from bpy_extras.io_utils import (
         path_reference_mode,
         axis_conversion,
         )
-        
+
 
 @orientation_helper(axis_forward='Y', axis_up='Z')
 class ExportIM(bpy.types.Operator, ExportHelper):
@@ -173,7 +173,7 @@ class IM_PT_export_geometry(bpy.types.Panel):
         layout.prop(operator, 'use_mesh_modifiers')
         layout.prop(operator, 'global_scale')
         #layout.prop(operator, 'use_triangles')
-        
+
 
 
 def menu_func_export(self, context):
@@ -190,7 +190,7 @@ classes = (
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-        
+
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
 
 def unregister():
