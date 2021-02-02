@@ -273,7 +273,7 @@ def write_file(filepath, objects, depsgraph, scene,
                 area += face.area
 
                 #split_faces.append(face)
-                face_normals.append(face.normal)
+                face_normals.append(face.normal.normalized())
                 #face_normals.append([0.0, 0.0, 1.0])
 
                 for uv_index, l_index in enumerate(face.loop_indices):
