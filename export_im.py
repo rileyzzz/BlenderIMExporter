@@ -388,7 +388,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 root_bone = ob
 
     if EXPORT_KIN:
-        write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
+        write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
+        #write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
 
     #Attachment setup
     attachments = []
@@ -509,7 +510,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             "base_color_texture", #TEX_Diffuse
                             "specular_texture", #TEX_Specular
                             "roughness_texture", #TEX_Shine
-                            "normalmap_texture" if mat.name.endswith(".m.tbumptex") else None, #TEX_Shinestrength
+                            "normalmap_texture" if mat.name.endswith(".m.tbumptex") else None, #TEX_Shinestrength, tbumptex uses the normal map alpha to determine shine strength?
                             "emission_color_texture" if emission_strength != 0.0 else None, #TEX_Selfillum
                             "alpha_texture", #TEX_Opacity
                             None, #TEX_Filtercolor
