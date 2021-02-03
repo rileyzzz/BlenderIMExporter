@@ -120,7 +120,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
                                          ).to_4x4())
 
         keywords["global_matrix"] = global_matrix
-        return export_im.save(context, **keywords)
+        return export_im.save(self, context, **keywords)
 
     def draw(self, context):
         pass

@@ -30,6 +30,9 @@ def mesh_triangulate(me):
 def veckey2d(v):
     return round(v[0], 4), round(v[1], 4)
 
+def power_of_two(n):
+    return (n & (n-1) == 0) and n != 0
+
 #def split_obj(split_objects, obj):
 #    print("Too many vertices on object " + obj.name + "! Splitting.")
 #    objcount = len(obj.vertices) % 65535
@@ -49,7 +52,7 @@ def jet_str(f, str):
     f.write(struct.pack("<I", len(encoded_name)))
     f.write(encoded_name)
 
-def texture_file(type, img_path, target_dir):
+def texture_file(type, img_path, target_dir, is_npo2):
     basename = os.path.basename(img_path).lower()
     texturepath = target_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
     txtpath = texturepath + ".txt"
@@ -58,6 +61,8 @@ def texture_file(type, img_path, target_dir):
         f.write("Primary=" + basename + "\n")
         f.write("Alpha=" + basename + "\n")
         f.write("Tile=st" + "\n")
+        if is_npo2:
+            f.write("nonpoweroftwo=1\n")
         if type is 8:
             f.write("NormalMapHint=normalmap")
     return texturepath
@@ -201,7 +206,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
             end_chunk(f, rf)
 
 
-def write_file(filepath, objects, depsgraph, scene,
+def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_TEXTURETXT=True,
                EXPORT_KIN=True,
@@ -227,13 +232,17 @@ def write_file(filepath, objects, depsgraph, scene,
         if me is None:
             continue
         if len(me.uv_layers) is 0:
-            print("Object " + obj.name + " is missing UV coodinates! Skipping.")
-            continue
+            print("Object " + obj.name + " is missing UV coodinates!") # Skipping.
+            #continue
 
         #uv_layer = me.uv_layers.active.data
         mesh_triangulate(me)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
-        uv_layer = me.uv_layers.active.data[:]
+
+        if len(me.uv_layers) is 0:
+            uv_layer = None
+        else:
+            uv_layer = me.uv_layers.active.data[:]
 
         me.calc_normals_split() #unsure
 
@@ -258,10 +267,17 @@ def write_file(filepath, objects, depsgraph, scene,
         #split into materials
         materials = me.materials
         print("object contains " + str(len(materials)) + " materials")
+        #mat_count = len(materials) if len(materials) > 0 else 1
+        if len(materials) == 0:
+            materials.append(None)
+
         #split_matblocks = [None] * len(materials)
         split_matblocks = [[] for i in range(len(materials))]
         for face in me.polygons:
-            split_matblocks[face.material_index].append(face)
+            mat_index = face.material_index
+            if mat_index is None:
+                mat_index = 0
+            split_matblocks[mat_index].append(face)
 
         for i, srcobject in enumerate(split_matblocks):
             wasCopied = [None] * len(me.vertices)
@@ -299,7 +315,7 @@ def write_file(filepath, objects, depsgraph, scene,
 
                         #for infl in influences:
                             #print("vert infl obj " + obj.name + " " + infl[0] + ": " + str(infl[1]))
-                        unique_verts.append([vert.co[:], uv_layer[l_index].uv[:], influences])
+                        unique_verts.append([vert.co[:], uv_layer[l_index].uv[:] if uv_layer != None else [0, 0], influences])
                         normals.append(vert.normal.normalized())
                         #normals.append([0.0, 0.0, 1.0])
                     indices.append(wasCopied[loop.vertex_index])
@@ -511,13 +527,16 @@ def write_file(filepath, objects, depsgraph, scene,
                             image = tex_wrap.image
                             if image is None:
                                 continue
+                            is_npo2 = not power_of_two(image.size[0]) or not power_of_two(image.size[1])
+                            if is_npo2:
+                                self.report({'WARNING'}, 'Texture ' + image.filepath + ' is not a power of two. Consider resizing it.')
                             filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
                                                        EXPORT_PATH_MODE, "", copy_set, image.library)
                             strength = 1.0
                             if entry is "normalmap_texture":
                                 strength = 0.2 * mat_wrap.normalmap_strength
                             if EXPORT_TEXTURETXT:
-                                texturepath = texture_file(type, filepath, dest_dir)
+                                texturepath = texture_file(type, filepath, dest_dir, is_npo2)
                             else:
                                 basename = os.path.basename(filepath).lower()
                                 texturepath = dest_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
@@ -766,7 +785,7 @@ def write_file(filepath, objects, depsgraph, scene,
 
 
 
-def _write(context, filepath,
+def _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS,
            EXPORT_TEXTURETXT,
            EXPORT_KIN,
@@ -794,7 +813,7 @@ def _write(context, filepath,
     #orig_frame = scene.frame_current
     full_path = ''.join(context_name)
         # EXPORT THE FILE.
-    write_file(full_path, objects, depsgraph, scene,
+    write_file(self, full_path, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS,
                EXPORT_TEXTURETXT,
                EXPORT_KIN,
@@ -806,7 +825,7 @@ def _write(context, filepath,
 
 
 
-def save(context,
+def save(self, context,
          filepath,
          *,
          use_selection=False,
@@ -817,7 +836,7 @@ def save(context,
          path_mode='AUTO'
          ):
 
-    _write(context, filepath,
+    _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS=use_mesh_modifiers,
            EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_KIN=use_kin,
