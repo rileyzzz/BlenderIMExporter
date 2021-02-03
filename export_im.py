@@ -324,7 +324,7 @@ def write_file(filepath, objects, depsgraph, scene,
                     area = 0.0
                     #split_faces.clear()
                     #idx2idxmap.clear()
-                    wasCopied = [None] * len(bm.verts)
+                    wasCopied = [None] * len(me.vertices)
                     print("Block split.")
 
             #Add remaining verts
