@@ -243,7 +243,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
             uv_layer = None
         else:
             uv_layer = me.uv_layers.active.data[:]
-
+        me_verts = me.vertices[:]
+        me_edges = me.edges[:]
         me.calc_normals_split() #unsure
 
         #bm = bmesh.new()
@@ -265,7 +266,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
         vertgroups = obj.vertex_groups
 
         #split into materials
-        materials = me.materials
+        materials = me.materials[:]
         print("object contains " + str(len(materials)) + " materials")
         #mat_count = len(materials) if len(materials) > 0 else 1
         if len(materials) == 0:
@@ -279,8 +280,11 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 mat_index = 0
             split_matblocks[mat_index].append(face)
 
+
         for i, srcobject in enumerate(split_matblocks):
-            wasCopied = [None] * len(me.vertices)
+            #wasCopied = [None] * len(me_verts)
+            uv_dict = {}
+            uv = uv_key = uv_val = None
             unique_verts = []
             indices = []
             normals = []
@@ -296,13 +300,17 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
                 for uv_index, l_index in enumerate(face.loop_indices):
                     loop = me.loops[l_index]
-                    vert = me.vertices[loop.vertex_index]
-                    #vert = loop.vert
-                    if wasCopied[loop.vertex_index] is None:
-                        wasCopied[loop.vertex_index] = len(unique_verts)
+                    vert = me_verts[loop.vertex_index]
 
-                        #uv = uv_layer[l_index].uv
-                        #uv_key = loop.vertex_index, veckey2d(uv)
+                    uv = uv_layer[l_index].uv if uv_layer != None else [0, 0]
+                    uv_key = loop.vertex_index, veckey2d(uv)
+                    #uv_key = veckey2d(uv)
+                    uv_val = uv_dict.get(uv_key)
+
+                    #vert = loop.vert
+                    if uv_val is None: #wasCopied[loop.vertex_index] is None or
+                        #wasCopied[loop.vertex_index] = len(unique_verts)
+                        uv_dict[uv_key] = len(unique_verts)
 
                         influences = []
                         for group in vertgroups:
@@ -315,10 +323,11 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
                         #for infl in influences:
                             #print("vert infl obj " + obj.name + " " + infl[0] + ": " + str(infl[1]))
-                        unique_verts.append([vert.co[:], uv_layer[l_index].uv[:] if uv_layer != None else [0, 0], influences])
+                        unique_verts.append([vert.co[:], uv[:], influences])
                         normals.append(vert.normal.normalized())
                         #normals.append([0.0, 0.0, 1.0])
-                    indices.append(wasCopied[loop.vertex_index])
+                    #indices.append(wasCopied[loop.vertex_index])
+                    indices.append(uv_dict[uv_key])
 
                 if len(unique_verts) > 65532:
                     #apply and update
@@ -340,7 +349,9 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     area = 0.0
                     #split_faces.clear()
                     #idx2idxmap.clear()
-                    wasCopied = [None] * len(me.vertices)
+                    #wasCopied = [None] * len(me_verts)
+                    uv_dict.clear()
+                    uv = uv_key = uv_val = None
                     print("Block split.")
 
             #Add remaining verts
