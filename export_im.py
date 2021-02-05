@@ -170,7 +170,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 #posebones_flat.append(pose_bone)
             if armature != None:
                 print("Found " + str(len(posebones_flat)) + "/" + str(len(armature.pose.bones)) + " pose bones")
-            
+
             print("Found " + str(len(objbones_flat)) + " object bones")
             #FrameList
             for i in range(NumFrames):
@@ -212,6 +212,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
 def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_TEXTURETXT=True,
+               EXPORT_TANGENTS=False,
                EXPORT_KIN=True,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
@@ -249,6 +250,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
         me_verts = me.vertices[:]
         me_edges = me.edges[:]
         me.calc_normals_split() #unsure
+        if EXPORT_TANGENTS:
+            me.calc_tangents()
 
         #bm = bmesh.new()
         #hold_meshes.append(bm)
@@ -292,6 +295,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
             indices = []
             normals = []
             face_normals = [] #[]
+            tangents = []
 
             area = 0.0
             for face in srcobject:
@@ -327,8 +331,11 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #for infl in influences:
                             #print("vert infl obj " + obj.name + " " + infl[0] + ": " + str(infl[1]))
                         unique_verts.append([vert.co[:], uv[:], influences])
-                        normals.append(vert.normal.normalized())
-                        #normals.append([0.0, 0.0, 1.0])
+                        #normals.append(vert.normal.normalized())
+                        normals.append(loop.normal.normalized())
+                        if EXPORT_TANGENTS:
+                            tangents.append(loop.tangent.normalized())
+
                     #indices.append(wasCopied[loop.vertex_index])
                     indices.append(uv_dict[uv_key])
 
@@ -341,6 +348,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                    indices.copy(),
                                    normals.copy(),
                                    face_normals.copy(),
+                                   tangents.copy(),
                                    area,
                                    uv_layer,
                                    objectParent])
@@ -349,6 +357,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     indices.clear()
                     normals.clear()
                     face_normals.clear()
+                    tangents.clear()
                     area = 0.0
                     #split_faces.clear()
                     #idx2idxmap.clear()
@@ -364,6 +373,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                indices.copy(),
                                normals.copy(),
                                face_normals.copy(),
+                               tangents.copy(),
                                area,
                                uv_layer,
                                objectParent])
@@ -459,9 +469,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 indices = entry[3]
                 normals = entry[4]
                 face_normals = entry[5]
-                area = entry[6]
-                uv_layer = entry[7]
-                objParent = entry[8]
+                tangents = entry[6]
+                area = entry[7]
+                uv_layer = entry[8]
+                objParent = entry[9]
                 #uv_layer = mesh.uv_layers.active.data
                 #mesh_triangulate(mesh)
                 #mat = obj.active_material
@@ -599,7 +610,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #Flags
                         geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
                         #UseTangents (201)
-                        geom.write(struct.pack("<I", 0))
+                        if EXPORT_TANGENTS:
+                            geom.write(struct.pack("<I", 1))
+                        else:
+                            geom.write(struct.pack("<I", 0))
 
                         #Area
                         #area = sum(face.calc_area() for face in bm.faces)
@@ -675,6 +689,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #FaceNormals
                         for normal in face_normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                        #Tangents
+                        if EXPORT_TANGENTS:
+                            for tangent in tangents:
+                                geom.write(struct.pack("<fff", tangent[0], tangent[1], tangent[2]))
 
                         #bm.free()
 
@@ -803,6 +821,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
 def _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS,
            EXPORT_TEXTURETXT,
+           EXPORT_TANGENTS,
            EXPORT_KIN,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
@@ -831,6 +850,7 @@ def _write(self, context, filepath,
     write_file(self, full_path, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS,
                EXPORT_TEXTURETXT,
+               EXPORT_TANGENTS,
                EXPORT_KIN,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
@@ -846,6 +866,7 @@ def save(self, context,
          use_selection=False,
          use_mesh_modifiers=True,
          use_texturetxt=True,
+         export_tangents=False,
          use_kin=True,
          global_matrix=None,
          path_mode='AUTO'
@@ -854,6 +875,7 @@ def save(self, context,
     _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS=use_mesh_modifiers,
            EXPORT_TEXTURETXT=use_texturetxt,
+           EXPORT_TANGENTS=export_tangents,
            EXPORT_KIN=use_kin,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,

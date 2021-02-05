@@ -86,6 +86,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=True,
             )
 
+    export_tangents: BoolProperty(
+            name="Export Tangents",
+            description="Export tangent data",
+            default=False,
+            )
+
     use_kin: BoolProperty(
             name="Export Animation",
             description="Write out the kin file",
@@ -152,6 +158,7 @@ class IM_PT_export_include(bpy.types.Panel):
 
         layout.separator()
         layout.prop(operator, 'use_texturetxt')
+        layout.prop(operator, 'export_tangents')
         layout.prop(operator, 'use_kin')
 
 
