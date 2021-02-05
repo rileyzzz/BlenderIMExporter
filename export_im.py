@@ -153,12 +153,13 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 end_chunk(rf, skel)
 
             posebones_flat = []
-            for bone in bones_flat:
-                print("bone " + bone.name)
-                for posebone in armature.pose.bones:
-                    if posebone.name == bone.name:
-                        posebones_flat.append(posebone)
-                        break
+            if armature != None:
+                for bone in bones_flat:
+                    print("bone " + bone.name)
+                    for posebone in armature.pose.bones:
+                        if posebone.name == bone.name:
+                            posebones_flat.append(posebone)
+                            break
 
             objbones_flat = []
             for obj in bones_flat:
@@ -167,7 +168,9 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
 
                 #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
                 #posebones_flat.append(pose_bone)
-            print("Found " + str(len(posebones_flat)) + "/" + str(len(armature.pose.bones)) + " pose bones")
+            if armature != None:
+                print("Found " + str(len(posebones_flat)) + "/" + str(len(armature.pose.bones)) + " pose bones")
+            
             print("Found " + str(len(objbones_flat)) + " object bones")
             #FrameList
             for i in range(NumFrames):
