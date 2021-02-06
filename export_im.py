@@ -190,19 +190,31 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
+                        #Scale
+                        #fram.write(struct.pack("<fff", scale.x, scale.y, scale.z))
 
                     for obj_bone in objbones_flat:
                         #objMat = obj_bone.matrix_world
                         #if obj_bone.parent != None:
                             #objMat = obj_bone.parent.matrix_world.inverted() @ objMat
                         #objMat = EXPORT_GLOBAL_MATRIX @ objMat
-                        objMat = EXPORT_GLOBAL_MATRIX @ obj_bone.matrix_world
+
+                        objMat = obj_bone.matrix_world
+                        #if obj_bone.parent is None:
+                            #objMat = obj_bone.matrix_world
+                        #else:
+                            #pbMat = obj_bone.matrix_local.copy() @ obj_bone.matrix_basis
+                            #objMat = obj_bone.parent.matrix_world.copy() @ pbMat
+
+                        objMat = EXPORT_GLOBAL_MATRIX @ objMat
                         position, rotation, scale = objMat.decompose()
                         rotation = rotation.inverted()
                         #Position
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
+                        #Scale
+                        #fram.write(struct.pack("<fff", scale.x, scale.y, scale.z))
 
                     end_chunk(rf, fram)
 
@@ -646,8 +658,18 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
                             if objParent != None:
-                                parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
-                                co_vector = parentMat.inverted() @ co_vector
+                                #OLD METHOD
+                                #parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
+                                #co_vector = parentMat.inverted() @ co_vector
+
+                                parentLoc, parentRot, parentScale = objParent.matrix_world.decompose()
+
+                                locMat = mathutils.Matrix.Translation(parentLoc)
+                                rotMat = parentRot.to_matrix().to_4x4()
+                                parentMat = locMat @ rotMat
+                                co_vector = EXPORT_GLOBAL_MATRIX @ parentMat.inverted() @ co_vector
+                                
+                            #co_vector = EXPORT_GLOBAL_MATRIX @ obj.matrix_parent_inverse @ co_vector
 
                             geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
@@ -737,12 +759,13 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             boneMat = bone.matrix_world
                         else:
                             print("bone " + bone.name + " parent " + bone.parent.name)
-                            #boneMat = bone.parent.matrix_world.inverted() @ bone.matrix_world
                             boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                            #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
                         boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
 
                     #boneMat = bone.matrix_local
                     loc, rot, scale = boneMat.decompose()
+
                     #rot = mathutils.Quaternion()
 
                     #LocalPosition
