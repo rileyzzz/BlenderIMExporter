@@ -351,7 +351,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     #indices.append(wasCopied[loop.vertex_index])
                     indices.append(uv_dict[uv_key])
 
-                if len(unique_verts) > 65532:
+                if len(unique_verts) > 65532 or len(indices) // 3 > 65535:
                     #apply and update
                     #ret = bmesh.ops.split(bm, geom=split_faces)
                     #split_blocks.append(ret["geom"])
@@ -668,7 +668,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                 rotMat = parentRot.to_matrix().to_4x4()
                                 parentMat = locMat @ rotMat
                                 co_vector = EXPORT_GLOBAL_MATRIX @ parentMat.inverted() @ co_vector
-                                
+
                             #co_vector = EXPORT_GLOBAL_MATRIX @ obj.matrix_parent_inverse @ co_vector
 
                             geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
