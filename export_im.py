@@ -63,7 +63,7 @@ def texture_file(type, img_path, target_dir, is_npo2):
         f.write("Tile=st" + "\n")
         if is_npo2:
             f.write("nonpoweroftwo=1\n")
-        if type is 8:
+        if type == 8:
             f.write("NormalMapHint=normalmap")
     return texturepath
 
@@ -221,6 +221,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
             end_chunk(f, rf)
 
 
+
 def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_TEXTURETXT=True,
@@ -247,7 +248,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
         if me is None:
             continue
-        if len(me.uv_layers) is 0:
+        if len(me.uv_layers) == 0:
             print("Object " + obj.name + " is missing UV coodinates!") # Skipping.
             #continue
 
@@ -255,7 +256,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
         mesh_triangulate(me)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
 
-        if len(me.uv_layers) is 0:
+        if len(me.uv_layers) == 0:
             uv_layer = None
         else:
             uv_layer = me.uv_layers.active.data[:]
@@ -426,6 +427,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
     if EXPORT_KIN:
         write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
         #write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
+        #reset frame after writing kin, for object transforms
+        scene.frame_set(0)
 
     #Attachment setup
     attachments = []
@@ -571,7 +574,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
                                                        EXPORT_PATH_MODE, "", copy_set, image.library)
                             strength = 1.0
-                            if entry is "normalmap_texture":
+                            if entry == "normalmap_texture":
                                 strength = 0.2 * mat_wrap.normalmap_strength
                             if EXPORT_TEXTURETXT:
                                 texturepath = texture_file(type, filepath, dest_dir, is_npo2)
@@ -759,8 +762,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             boneMat = bone.matrix_world
                         else:
                             print("bone " + bone.name + " parent " + bone.parent.name)
-                            #boneMat = bone.matrix_parent_inverse @ bone.matrix_world
-                            boneMat = bone.matrix_local
+                            boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                            #boneMat = bone.matrix_local
                             #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
                         boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
 
@@ -855,8 +858,10 @@ def _write(self, context, filepath,
     base_name, ext = os.path.splitext(filepath)
     context_name = [base_name, '', '', ext]  # Base name, scene name, frame number, extension
 
-    depsgraph = context.evaluated_depsgraph_get()
     scene = context.scene
+    scene.frame_set(0)
+
+    depsgraph = context.evaluated_depsgraph_get()
 
     # Exit edit mode
     if bpy.ops.object.mode_set.poll():
