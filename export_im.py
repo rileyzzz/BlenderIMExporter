@@ -761,7 +761,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             print("bone " + bone.name + " parent " + bone.parent.name)
                             #boneMat = bone.matrix_parent_inverse @ bone.matrix_world
 							boneMat = bone.matrix_local
-							
+
                             #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
                         boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
 
