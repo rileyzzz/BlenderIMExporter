@@ -16,6 +16,7 @@
 #    import bpy
 #    from . import export_im
 
+# Contribution 2021/06/05 #1TFM. Added version selector for you minimum trainz build.
 
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
@@ -65,7 +66,39 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default="*.im",
             options={'HIDDEN'},
             )
+            
+    #Handle the update to the properties when the dropdown is altered.
+    def trainzVer_update (self, context):
+        if self.use_trainzVer != '2006':
+            self.export_tangents = True
+            
+        if self.use_trainzVer == '2006':
+            self.export_tangents = False
+            
+        context.region.tag_redraw()
 
+    #Define the lsit of trainz versions
+    #This can be simplified depending on whether TS2009 - TS 19 use the same settings
+    #TS 04/06 Appear to not support the tangents option.
+    trainzVersion = [
+        ("2006", "TS04 / TS06",'TS04/TS06 compatibility'),
+        ("2009", "TS09",'TS09 or newer'),
+        ("2010", "TS10",'TS10 or newer'),
+        ("2012", "TS12",'TS12 or newer'),
+        ("2015", "T:ANE",'T:ANE or newer'),
+        ("2019", "TS19",'TS19 or newer')
+    ]
+
+    #Create the drop down to allow for selection of our target trainz version
+    #Default to Trainz 2009 mode
+    use_trainzVer: EnumProperty(
+            items=trainzVersion,
+            name="Trainz Verison",
+            description="Sets the compatibility level of the IM format.",
+            default="2009",
+            update=trainzVer_update,
+            )
+            
     # context group
     use_selection: BoolProperty(
             name="Selection Only",
@@ -89,7 +122,8 @@ class ExportIM(bpy.types.Operator, ExportHelper):
     export_tangents: BoolProperty(
             name="Export Tangents",
             description="Export tangent data",
-            default=False,
+            #Defaulting to TS2009 support
+            default=True,
             )
 
     use_kin: BoolProperty(
@@ -130,6 +164,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
 
     def draw(self, context):
         pass
+        
 
 
 class IM_PT_export_include(bpy.types.Panel):
@@ -153,6 +188,10 @@ class IM_PT_export_include(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
+        #Add our version dropdown to the interface.
+        layout.prop(operator, 'use_trainzVer')
+        layout.separator()
+        
         col = layout.column(heading="Limit to")
         col.prop(operator, 'use_selection')
 
