@@ -48,7 +48,9 @@ def power_of_two(n):
     #new_obj.data = src_obj.data.copy()
 
 def jet_str(f, str):
-    encoded_name = (str + '\0').encode('utf-8')
+    #wacky Jet byte alignment
+    numTerminators = 4 - len(str) % 4 if len(str) % 4 != 0 else 0
+    encoded_name = (str + ('\0' * numTerminators)).encode('utf-8')
     f.write(struct.pack("<I", len(encoded_name)))
     f.write(encoded_name)
 
@@ -633,7 +635,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #Area
                         #area = sum(face.calc_area() for face in bm.faces)
                         geom.write(struct.pack("<f", area))
-                        #NumVerticies
+                        #NumVertices
                         geom.write(struct.pack("<I", len(verts)))
                         #NumPrimitives
                         geom.write(struct.pack("<I", len(indices) // 3))
