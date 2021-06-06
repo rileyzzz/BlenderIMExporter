@@ -223,11 +223,11 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
             end_chunk(f, rf)
 
 
-
 def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_TEXTURETXT=True,
-               EXPORT_TANGENTS=False,
+               EXPORT_TANGENTS=True,
+               EXPORT_BOUNDS=True,
                EXPORT_KIN=True,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
@@ -240,6 +240,12 @@ def write_file(self, filepath, objects, depsgraph, scene,
     #split objects
     meshes = []
     hold_meshes = [] #prevent garbage collection of bmeshes
+
+    #set to defaults
+    bounds_set = False
+    bounds_min = mathutils.Vector((0.0, 0.0, 0.0))
+    bounds_max = mathutils.Vector((0.0, 0.0, 0.0))
+
     for obj in objects:
         final = obj.evaluated_get(depsgraph) if EXPORT_APPLY_MODIFIERS else obj.original
 
@@ -350,6 +356,19 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         normals.append(loop.normal.normalized())
                         if EXPORT_TANGENTS:
                             tangents.append(loop.tangent.normalized())
+                        if EXPORT_BOUNDS:
+                            if bounds_set:
+                                bounds_min.x = min(bounds_min.x, vert.co.x)
+                                bounds_min.y = min(bounds_min.y, vert.co.y)
+                                bounds_min.z = min(bounds_min.z, vert.co.z)
+                                bounds_max.x = max(bounds_max.x, vert.co.x)
+                                bounds_max.y = max(bounds_max.y, vert.co.y)
+                                bounds_max.z = max(bounds_max.z, vert.co.z)
+                            else:
+                                bounds_set = True
+                                bounds_min = mathutils.Vector(vert.co)
+                                bounds_max = mathutils.Vector(vert.co)
+
 
                     #indices.append(wasCopied[loop.vertex_index])
                     indices.append(uv_dict[uv_key])
@@ -439,6 +458,21 @@ def write_file(self, filepath, objects, depsgraph, scene,
             print("Attachment " + ob.name)
             attachments.append(ob)
 
+            obj_loc = ob.matrix_world.translation
+            #extend bounds for attachments too
+            if EXPORT_BOUNDS:
+                if bounds_set:
+                    bounds_min.x = min(bounds_min.x, obj_loc.x)
+                    bounds_min.y = min(bounds_min.y, obj_loc.y)
+                    bounds_min.z = min(bounds_min.z, obj_loc.z)
+                    bounds_max.x = max(bounds_max.x, obj_loc.x)
+                    bounds_max.y = max(bounds_max.y, obj_loc.y)
+                    bounds_max.z = max(bounds_max.z, obj_loc.z)
+                else:
+                    bounds_set = True
+                    bounds_min = mathutils.Vector(obj_loc)
+                    bounds_max = mathutils.Vector(obj_loc)
+
 
     copy_set = set()
     with open(filepath, "wb") as f:
@@ -453,7 +487,11 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
             rf.write('INFO'.encode('utf-8'))
             with io.BytesIO() as info:
-                chunk_ver(info, 102)
+                if EXPORT_BOUNDS:
+                    chunk_ver(info, 104)
+                else:
+                    chunk_ver(info, 102)
+
                 objLocation, objRotation, objScale = EXPORT_GLOBAL_MATRIX.decompose();
                 #Position
                 info.write(struct.pack("<fff", objLocation.x, objLocation.y, objLocation.z))
@@ -466,6 +504,12 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 info.write(struct.pack("<I", 0))
                 #MaxInfluencePerChunk
                 info.write(struct.pack("<I", 0))
+
+                #Bounding Box
+                if EXPORT_BOUNDS:
+                    info.write(struct.pack("<fff", bounds_min.x, bounds_min.y, bounds_min.z))
+                    info.write(struct.pack("<fff", bounds_max.x, bounds_max.y, bounds_max.z))
+
                 end_chunk(rf, info)
 
 
@@ -851,6 +895,7 @@ def _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS,
            EXPORT_TEXTURETXT,
            EXPORT_TANGENTS,
+           EXPORT_BOUNDS,
            EXPORT_KIN,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
@@ -882,6 +927,7 @@ def _write(self, context, filepath,
                EXPORT_APPLY_MODIFIERS,
                EXPORT_TEXTURETXT,
                EXPORT_TANGENTS,
+               EXPORT_BOUNDS,
                EXPORT_KIN,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
@@ -897,7 +943,8 @@ def save(self, context,
          use_selection=False,
          use_mesh_modifiers=True,
          use_texturetxt=True,
-         export_tangents=False,
+         export_tangents=True,
+         export_bounds=True,
          use_kin=True,
          global_matrix=None,
          path_mode='AUTO'
@@ -907,6 +954,7 @@ def save(self, context,
            EXPORT_APPLY_MODIFIERS=use_mesh_modifiers,
            EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_TANGENTS=export_tangents,
+           EXPORT_BOUNDS=export_bounds,
            EXPORT_KIN=use_kin,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,

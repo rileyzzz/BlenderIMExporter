@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 2, 0),
+    "version": (1, 2, 1),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -89,7 +89,13 @@ class ExportIM(bpy.types.Operator, ExportHelper):
     export_tangents: BoolProperty(
             name="Export Tangents",
             description="Export tangent data",
-            default=False,
+            default=True,
+            )
+
+    export_bounds: BoolProperty(
+            name="Export Bounding Box",
+            description="Export bounding box data",
+            default=True,
             )
 
     use_kin: BoolProperty(
@@ -159,6 +165,7 @@ class IM_PT_export_include(bpy.types.Panel):
         layout.separator()
         layout.prop(operator, 'use_texturetxt')
         layout.prop(operator, 'export_tangents')
+        layout.prop(operator, 'export_bounds')
         layout.prop(operator, 'use_kin')
 
 
