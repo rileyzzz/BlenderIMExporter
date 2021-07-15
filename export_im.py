@@ -338,15 +338,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     vert = me_verts[loop.vertex_index]
 
                     no = loop.normal
-                    #no_key = loop.vertex_index, veckey3d(no)
 
                     uv = uv_layer[l_index].uv if uv_layer != None else [0, 0]
                     uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no)
                     uv_val = uv_dict.get(uv_key)
-
-                    # no = loop.normal
-                    # no_key = loop.vertex_index, veckey3d(no)
-                    # no_val = no_dict.get(no_key)
 
                     #vert = loop.vert
                     if uv_val is None: #wasCopied[loop.vertex_index] is None or
