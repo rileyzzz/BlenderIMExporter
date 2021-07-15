@@ -30,6 +30,9 @@ def mesh_triangulate(me):
 def veckey2d(v):
     return round(v[0], 4), round(v[1], 4)
 
+def veckey3d(v):
+    return round(v.x, 4), round(v.y, 4), round(v.z, 4)
+    
 def power_of_two(n):
     return (n & (n-1) == 0) and n != 0
 
@@ -264,13 +267,16 @@ def write_file(self, filepath, objects, depsgraph, scene,
         mesh_triangulate(me)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
 
+
+        me.calc_normals_split() #unsure
+
         if len(me.uv_layers) == 0:
             uv_layer = None
         else:
             uv_layer = me.uv_layers.active.data[:]
         me_verts = me.vertices[:]
         me_edges = me.edges[:]
-        me.calc_normals_split() #unsure
+        
         if EXPORT_TANGENTS:
             me.calc_tangents()
 
@@ -312,6 +318,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
             #wasCopied = [None] * len(me_verts)
             uv_dict = {}
             uv = uv_key = uv_val = None
+
             unique_verts = []
             indices = []
             normals = []
@@ -330,10 +337,16 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     loop = me.loops[l_index]
                     vert = me_verts[loop.vertex_index]
 
+                    no = loop.normal
+                    #no_key = loop.vertex_index, veckey3d(no)
+
                     uv = uv_layer[l_index].uv if uv_layer != None else [0, 0]
-                    uv_key = loop.vertex_index, veckey2d(uv)
-                    #uv_key = veckey2d(uv)
+                    uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no)
                     uv_val = uv_dict.get(uv_key)
+
+                    # no = loop.normal
+                    # no_key = loop.vertex_index, veckey3d(no)
+                    # no_val = no_dict.get(no_key)
 
                     #vert = loop.vert
                     if uv_val is None: #wasCopied[loop.vertex_index] is None or
@@ -349,13 +362,14 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             if weight != 0.0:
                                 influences.append([group.name, weight])
 
-                        #for infl in influences:
-                            #print("vert infl obj " + obj.name + " " + infl[0] + ": " + str(infl[1]))
                         unique_verts.append([vert.co[:], uv[:], influences])
                         #normals.append(vert.normal.normalized())
                         normals.append(loop.normal.normalized())
+
                         if EXPORT_TANGENTS:
                             tangents.append(loop.tangent.normalized())
+
+                        
                         if EXPORT_BOUNDS:
                             if bounds_set:
                                 bounds_min.x = min(bounds_min.x, vert.co.x)
