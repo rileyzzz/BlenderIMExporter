@@ -50,6 +50,17 @@ def power_of_two(n):
     #new_obj = src_obj.copy()
     #new_obj.data = src_obj.data.copy()
 
+def sanitize_filename(str):
+    outstr = ''
+    for c in str:
+        outchar = c
+        if c == '{' or c == '}' or c == '<' or c == '>':
+            outchar = '_'
+        
+        outstr += outchar
+    
+    return outstr
+
 def jet_str(f, str):
     #wacky Jet byte alignment
     numTerminators = 4 - len(str) % 4 if len(str) % 4 != 0 else 0
@@ -59,7 +70,7 @@ def jet_str(f, str):
 
 def texture_file(type, img_path, target_dir, is_npo2):
     basename = os.path.basename(img_path).lower()
-    texturepath = target_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
+    texturepath = sanitize_filename(target_dir + '\\' + os.path.splitext(basename)[0] + ".texture")
     txtpath = texturepath + ".txt"
     print("write to " + txtpath)
     with open(txtpath, "w") as f:
