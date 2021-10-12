@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 2, 2),
+    "version": (1, 2, 3),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -98,6 +98,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=True,
             )
 
+    use_wide_strings: BoolProperty(
+            name="Force Wide Strings",
+            description="Export all .im/.kin strings with wide 16 bit formatting instead of 8 bit. This may protect against some ripping software",
+            default=False,
+            )
+
     use_kin: BoolProperty(
             name="Export Animation",
             description="Write out the kin file",
@@ -166,6 +172,7 @@ class IM_PT_export_include(bpy.types.Panel):
         layout.prop(operator, 'use_texturetxt')
         layout.prop(operator, 'export_tangents')
         layout.prop(operator, 'export_bounds')
+        layout.prop(operator, 'use_wide_strings')
         layout.prop(operator, 'use_kin')
 
 

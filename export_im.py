@@ -61,11 +61,29 @@ def sanitize_filename(str):
     
     return outstr
 
-def jet_str(f, str):
+GLOBAL_WIDE_STRINGS = False
+
+def jet_str(f, str, wide=False):
+    global GLOBAL_WIDE_STRINGS
+    wide = wide or GLOBAL_WIDE_STRINGS
+    
     #wacky Jet byte alignment
-    numTerminators = 4 - len(str) % 4 if len(str) % 4 != 0 else 0
-    encoded_name = (str + ('\0' * numTerminators)).encode('utf-8')
-    f.write(struct.pack("<I", len(encoded_name)))
+    str_length = len(str)
+    if(wide):
+        str_length *= 2
+    
+    numTerminators = 4 - str_length % 4 if str_length % 4 != 0 else 0
+    encoded_name = (str + ('\0' * numTerminators)).encode('utf-16' if wide else 'utf-8')
+    
+    #remove the byte order mark
+    if wide:
+        encoded_name = encoded_name[2:]
+    
+    len_bytes = bytearray(struct.pack("<I", len(encoded_name)))
+    if(wide):
+        len_bytes[3] = 0x40
+    
+    f.write(len_bytes)
     f.write(encoded_name)
 
 def texture_file(type, img_path, target_dir, is_npo2):
@@ -916,11 +934,15 @@ def _write(self, context, filepath,
            EXPORT_TEXTURETXT,
            EXPORT_TANGENTS,
            EXPORT_BOUNDS,
+           EXPORT_WIDE_STRINGS,
            EXPORT_KIN,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
            EXPORT_PATH_MODE,
            ):
+    
+    global GLOBAL_WIDE_STRINGS
+    GLOBAL_WIDE_STRINGS = EXPORT_WIDE_STRINGS
 
     base_name, ext = os.path.splitext(filepath)
     context_name = [base_name, '', '', ext]  # Base name, scene name, frame number, extension
@@ -965,6 +987,7 @@ def save(self, context,
          use_texturetxt=True,
          export_tangents=True,
          export_bounds=True,
+         use_wide_strings=False,
          use_kin=True,
          global_matrix=None,
          path_mode='AUTO'
@@ -975,6 +998,7 @@ def save(self, context,
            EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_TANGENTS=export_tangents,
            EXPORT_BOUNDS=export_bounds,
+           EXPORT_WIDE_STRINGS=use_wide_strings,
            EXPORT_KIN=use_kin,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
