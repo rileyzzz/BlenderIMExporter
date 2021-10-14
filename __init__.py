@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 2, 3),
+    "version": (1, 2, 4),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -104,6 +104,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=False,
             )
 
+    subsurf_ambient: BoolProperty(
+            name="Export Subsurface Color as Ambient",
+            description="Export the Principled BSDF Subsurface Color as the material ambient",
+            default=False,
+            )
+
     use_kin: BoolProperty(
             name="Export Animation",
             description="Write out the kin file",
@@ -173,6 +179,7 @@ class IM_PT_export_include(bpy.types.Panel):
         layout.prop(operator, 'export_tangents')
         layout.prop(operator, 'export_bounds')
         layout.prop(operator, 'use_wide_strings')
+        layout.prop(operator, 'subsurf_ambient')
         layout.prop(operator, 'use_kin')
 
 
