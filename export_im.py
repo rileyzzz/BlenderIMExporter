@@ -5,6 +5,7 @@ import bmesh
 import bpy
 import math
 import mathutils
+import bl_math
 from mathutils import Matrix, Vector, Color
 from bpy_extras import io_utils, node_shader_utils
 import bmesh
@@ -602,17 +603,18 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #Opacity
                         matl.write(struct.pack("<f", mat_wrap.alpha))
                         #Ambient
-                        matl.write(struct.pack("<fff", mat_wrap.base_color[0],
-                                                       mat_wrap.base_color[1],
-                                                       mat_wrap.base_color[2]))
+                        matl.write(struct.pack("<fff", mat_wrap.base_color[0] if not EXPORT_SUBSURF_AMBIENT else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value,
+                                                       mat_wrap.base_color[1] if not EXPORT_SUBSURF_AMBIENT else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value,
+                                                       mat_wrap.base_color[2] if not EXPORT_SUBSURF_AMBIENT else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value))
                         #Diffuse
                         matl.write(struct.pack("<fff", mat_wrap.base_color[0],
                                                        mat_wrap.base_color[1],
                                                        mat_wrap.base_color[2]))
                         #Specular
-                        matl.write(struct.pack("<fff", mat_wrap.specular,
-                                                       mat_wrap.specular,
-                                                       mat_wrap.specular))
+                        matl.write(struct.pack("<fff", bl_math.lerp(mat_wrap.specular, mat_wrap.specular * mat_wrap.base_color[0], mat_wrap.specular_tint),
+                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * mat_wrap.base_color[1], mat_wrap.specular_tint),
+                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * mat_wrap.base_color[2], mat_wrap.specular_tint)))
+                        
                         #Emissive
                         if hasattr(mat_wrap, 'emission_strength'):
                             emission_strength = mat_wrap.emission_strength
