@@ -27,7 +27,12 @@ IOR           | N/A                             | Refraction Texture (unused by 
 There were several additional texture slots in the JET spec that are likely unsupported by Trainz (TEX_Ambient, TEX_Filtercolor, and TEX_Displacement). They are not currently supported by the exporter, but the exporter could be modified to support these texture slots if the need arises.
 
 Additionally, the exported Emissive Color (only if supplied by a color rather than a texture) will be multiplied by the Principled BSDF Emission Strength value, to allow for overbright materials (this influences bloom in TRS19).
-The strength of the normal map texture in the file will also be influenced by the Strength value of the Normal Map node.
+
+The strength of the normal map texture in the file will be influenced by the Strength value of the Normal Map node.
+
+The "Specular Tint" value of the Principled BSDF node will influence how much the specular value of the material is muliplied (and colored) by the diffuse color.
+
+An additional export option is provided that instructs the exporter to use the "Subsurface Color" input of the Principled BSDF node as the material ambient color. As most .im files have their ambient color as a repeat of the diffuse color, this may lead to unexpected results.
 
 ## Installation
 1. Select `Code -> Download ZIP` at the top of this page.
