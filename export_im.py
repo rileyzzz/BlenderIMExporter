@@ -578,10 +578,19 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 #mesh_triangulate(mesh)
                 #mat = obj.active_material
 
-                defaultMaterial = bpy.data.materials.new(obj.name)
+                defaultMaterial = bpy.data.materials.new(obj.name + ".m.notex")
                 if mat is None:
                     mat = defaultMaterial
-
+                
+                if not mat.name.endswith(".m.notex") and \
+                    not mat.name.endswith(".m.onetex") and \
+                    not mat.name.endswith(".m.reflect") and \
+                    not mat.name.endswith(".m.gloss") and \
+                    not mat.name.endswith(".m.tbumptex") and \
+                    not mat.name.endswith(".m.tbumpgloss") and \
+                    not mat.name.endswith(".m.tbumpenv"):
+                    self.report({'WARNING'}, "Material " + mat.name + " on object " + obj.name + " is missing a valid material extension. This may cause issues in games earlier than TANE. A list of valid legacy material extensions is available here: https://online.ts2009.com/mediaWiki/index.php/Material_Types")
+                
                 rf.write('CHNK'.encode('utf-8'))
                 with io.BytesIO() as attr:
                     chunk_ver(attr, 100)
