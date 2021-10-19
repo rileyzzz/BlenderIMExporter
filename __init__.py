@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 2, 8),
+    "version": (1, 3, 0),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -253,6 +253,7 @@ class IM_PT_export_animation(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
+        layout.enabled = operator.use_kin
         layout.prop(operator, 'use_skel')
         layout.prop(operator, 'export_anim_scale')
         layout.prop(operator, 'use_relative_positioning')
