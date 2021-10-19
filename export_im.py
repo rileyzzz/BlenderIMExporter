@@ -32,7 +32,7 @@ def veckey2d(v):
     return round(v[0], 4), round(v[1], 4)
 
 def veckey3d(v):
-    return round(v.x, 4), round(v.y, 4), round(v.z, 4)
+    return round(v[0], 4), round(v[1], 4), round(v[2], 4)
     
 def power_of_two(n):
     return (n & (n-1) == 0) and n != 0
@@ -368,6 +368,12 @@ def write_file(self, filepath, objects, depsgraph, scene,
     material_groups = {}
 
     for obj in objects:
+
+        #curves can be converted into meshes
+        #consider removing this if we want to support line primitives at some point
+        if obj.type == 'CURVE':
+            continue
+
         final = obj.evaluated_get(depsgraph) if EXPORT_APPLY_MODIFIERS else obj.original
 
         try:
@@ -377,26 +383,37 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
         if me is None:
             continue
-        if len(me.uv_layers) == 0:
-            print("Object " + obj.name + " is missing UV coodinates!") # Skipping.
-            #continue
 
         #uv_layer = me.uv_layers.active.data
-        mesh_triangulate(me)
+        #mesh_triangulate(me)
+
+        print("Pre-processing object " + obj.name)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
 
-        me.calc_normals_split() #unsure
-        
+        me.calc_normals_split()
+
+        use_tangents = EXPORT_TANGENTS
         if EXPORT_TANGENTS:
-            me.calc_tangents()
+            if len(me.uv_layers) > 0 or me.uv_layers.active: # or len(me.uv_layers.active.data) < len(me.loops)
+                try:
+                    me.calc_tangents()
+                except Exception:
+                    self.report({'INFO'}, 'Mesh \'' + obj.name + '\' has polygons with more than 4 vertices. Unable to calculate tangents.')
+                    use_tangents = False
+            else:
+                self.report({'WARNING'}, 'Object \'' + obj.name + '\' is missing UV data, which is required for tangent generation.')
+                use_tangents = False
+            
 
         materials = me.materials[:]
         print("object contains " + str(len(materials)) + " materials")
         if len(materials) == 0:
             materials.append(None)
         
+        me.calc_loop_triangles()
+
         mats_2_faces = {}
-        for face in me.polygons:
+        for face in me.loop_triangles:
             mat_index = face.material_index
             if mat_index is None:
                 mat_index = 0
@@ -406,8 +423,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
             mats_2_faces[mat].append(face)
         
         for mat in materials:
-            if mat not in material_groups:
-                material_groups[mat] = []
+            mat_key = mat, use_tangents
+
+            if mat_key not in material_groups:
+                material_groups[mat_key] = []
 
             #if the material doesn't have any faces assigned to it, don't bother giving it a chunk
             if mat not in mats_2_faces:
@@ -419,10 +438,13 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 "materials": materials,
                 "faces": mats_2_faces[mat]
             }
-            material_groups[mat].append(obj_data)
+
+            material_groups[mat_key].append(obj_data)
         
     
-    for material, group in material_groups.items():
+    for mat_key, group in material_groups.items():
+        material = mat_key[0]
+        use_tangents = mat_key[1]
         print("Processing material")
         #per-chunk data
 
@@ -467,11 +489,12 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
                 face_normals.append(face.normal.normalized())
 
-                for uv_index, l_index in enumerate(face.loop_indices):
+                for uv_index, l_index in enumerate(face.loops):
                     loop = me.loops[l_index]
                     vert = me_verts[loop.vertex_index]
 
-                    no = loop.normal
+                    #no = loop.normal
+                    no = mathutils.Vector(face.split_normals[uv_index])
 
                     uv = uv_layer[l_index].uv if uv_layer != None else [0, 0]
                     uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no)
@@ -490,9 +513,9 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                 influences[group.name] = weight
 
                         unique_verts.append([vert.co[:], uv[:], influences])
-                        normals.append(loop.normal.normalized())
+                        normals.append(no.normalized())
 
-                        if EXPORT_TANGENTS:
+                        if use_tangents:
                             tangents.append(loop.tangent.normalized())
 
                         
@@ -814,7 +837,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #Flags
                         geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
                         #UseTangents (201)
-                        if EXPORT_TANGENTS:
+                        if EXPORT_TANGENTS and len(tangents) > 0:
                             geom.write(struct.pack("<I", 1))
                         else:
                             geom.write(struct.pack("<I", 0))
@@ -908,7 +931,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         for normal in face_normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
                         #Tangents
-                        if EXPORT_TANGENTS:
+                        if EXPORT_TANGENTS and len(tangents) > 0:
                             for tangent in tangents:
                                 geom.write(struct.pack("<fff", tangent[0], tangent[1], tangent[2]))
 
