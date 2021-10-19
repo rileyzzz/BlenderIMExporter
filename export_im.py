@@ -365,6 +365,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
     bounds_min = mathutils.Vector((0.0, 0.0, 0.0))
     bounds_max = mathutils.Vector((0.0, 0.0, 0.0))
 
+    material_groups = {}
+
     for obj in objects:
         final = obj.evaluated_get(depsgraph) if EXPORT_APPLY_MODIFIERS else obj.original
 
@@ -383,72 +385,83 @@ def write_file(self, filepath, objects, depsgraph, scene,
         mesh_triangulate(me)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
 
-
         me.calc_normals_split() #unsure
-
-        if len(me.uv_layers) == 0:
-            uv_layer = None
-        else:
-            uv_layer = me.uv_layers.active.data[:]
-        me_verts = me.vertices[:]
-        me_edges = me.edges[:]
         
         if EXPORT_TANGENTS:
             me.calc_tangents()
 
-        #bm = bmesh.new()
-        #hold_meshes.append(bm)
-        #bm.from_mesh(me)
-        #bmesh.ops.triangulate(bm, faces=bm.faces)
-
-
-        objectParent = None #empty and lattice parents
-        if obj.parent != None:
-            if "b.r." in obj.parent.name:
-                objectParent = obj.parent
-
-
-        #split_faces = []
-        #idx2idxmap = {}
-        print("Processing mesh...")
-
-        #should be final - edge split, etc
-        vertgroups = final.vertex_groups
-
-        #split into materials
         materials = me.materials[:]
         print("object contains " + str(len(materials)) + " materials")
-        #mat_count = len(materials) if len(materials) > 0 else 1
         if len(materials) == 0:
             materials.append(None)
-
-        #split_matblocks = [None] * len(materials)
-        split_matblocks = [[] for i in range(len(materials))]
+        
+        mats_2_faces = {}
         for face in me.polygons:
             mat_index = face.material_index
             if mat_index is None:
                 mat_index = 0
-            split_matblocks[mat_index].append(face)
+            mat = materials[mat_index]
+            if mat not in mats_2_faces:
+                mats_2_faces[mat] = []
+            mats_2_faces[mat].append(face)
+        
+        for mat in materials:
+            if mat not in material_groups:
+                material_groups[mat] = []
+            obj_data = {
+                "me": me,
+                "obj": final,
+                "materials": materials,
+                "faces": mats_2_faces[mat]
+            }
+            material_groups[mat].append(obj_data)
+        
+    
+    for material, group in material_groups.items():
+        print("Processing material")
+        #per-chunk data
+        uv_dict = {}
+        uv = uv_key = uv_val = None
+
+        unique_verts = []
+        indices = []
+        normals = []
+        face_normals = []
+        tangents = []
+
+        area = 0.0
+        
+        for obj_data in group:
+            me = obj_data["me"]
+            obj = obj_data["obj"]
+            materials = obj_data["materials"]
+            obj_faces = obj_data["faces"]
+
+            if len(me.uv_layers) == 0:
+                uv_layer = None
+            else:
+                uv_layer = me.uv_layers.active.data[:]
+            me_verts = me.vertices[:]
+            me_edges = me.edges[:]
 
 
-        for i, srcobject in enumerate(split_matblocks):
-            #wasCopied = [None] * len(me_verts)
-            uv_dict = {}
-            uv = uv_key = uv_val = None
+            objectParent = None #empty and lattice parents
+            if obj.parent != None:
+                if "b.r." in obj.parent.name:
+                    objectParent = obj.parent
 
-            unique_verts = []
-            indices = []
-            normals = []
-            face_normals = [] #[]
-            tangents = []
+            print("Processing mesh...")
 
-            area = 0.0
-            for face in srcobject:
+            #should be final - edge split, etc
+            vertgroups = obj.vertex_groups
+
+
+
+
+            for i, face in enumerate(obj_faces):
                 area += face.area
 
-                #split_faces.append(face)
                 face_normals.append(face.normal.normalized())
-                #face_normals.append([0.0, 0.0, 1.0])
 
                 for uv_index, l_index in enumerate(face.loop_indices):
                     loop = me.loops[l_index]
@@ -460,9 +473,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no)
                     uv_val = uv_dict.get(uv_key)
 
-                    #vert = loop.vert
-                    if uv_val is None: #wasCopied[loop.vertex_index] is None or
-                        #wasCopied[loop.vertex_index] = len(unique_verts)
+                    if uv_val is None:
                         uv_dict[uv_key] = len(unique_verts)
 
                         influences = {}
@@ -472,11 +483,9 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             except RuntimeError:
                                 weight = 0.0
                             if weight != 0.0:
-                                # influences.append([group.name, weight])
                                 influences[group.name] = weight
 
                         unique_verts.append([vert.co[:], uv[:], influences])
-                        #normals.append(vert.normal.normalized())
                         normals.append(loop.normal.normalized())
 
                         if EXPORT_TANGENTS:
@@ -496,23 +505,19 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                 bounds_min = mathutils.Vector(vert.co)
                                 bounds_max = mathutils.Vector(vert.co)
 
-
-                    #indices.append(wasCopied[loop.vertex_index])
                     indices.append(uv_dict[uv_key])
 
                 if len(unique_verts) > 65532 or len(indices) // 3 > 65535:
                     #apply and update
-                    #ret = bmesh.ops.split(bm, geom=split_faces)
-                    #split_blocks.append(ret["geom"])
-                    meshes.append([obj, materials[i],
-                                   unique_verts.copy(),
-                                   indices.copy(),
-                                   normals.copy(),
-                                   face_normals.copy(),
-                                   tangents.copy(),
-                                   area,
-                                   uv_layer,
-                                   objectParent])
+                    meshes.append([obj, material,
+                                unique_verts.copy(),
+                                indices.copy(),
+                                normals.copy(),
+                                face_normals.copy(),
+                                tangents.copy(),
+                                area,
+                                uv_layer,
+                                objectParent])
 
                     unique_verts.clear()
                     indices.clear()
@@ -520,24 +525,21 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     face_normals.clear()
                     tangents.clear()
                     area = 0.0
-                    #split_faces.clear()
-                    #idx2idxmap.clear()
-                    #wasCopied = [None] * len(me_verts)
                     uv_dict.clear()
                     uv = uv_key = uv_val = None
                     print("Block split.")
 
-            #Add remaining verts
-            if len(unique_verts) > 0:
-                meshes.append([obj, materials[i],
-                               unique_verts.copy(),
-                               indices.copy(),
-                               normals.copy(),
-                               face_normals.copy(),
-                               tangents.copy(),
-                               area,
-                               uv_layer,
-                               objectParent])
+        #Add remaining verts
+        if len(unique_verts) > 0:
+            meshes.append([obj, material,
+                        unique_verts.copy(),
+                        indices.copy(),
+                        normals.copy(),
+                        face_normals.copy(),
+                        tangents.copy(),
+                        area,
+                        uv_layer,
+                        objectParent])
         print("Complete.")
 
         #bm.free()
