@@ -855,6 +855,12 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                 parentMat = locMat @ rotMat
                                 co_vector = EXPORT_GLOBAL_MATRIX @ parentMat.inverted() @ co_vector
 
+                            if math.isnan(co_vector[0]) or math.isnan(co_vector[1]) or math.isnan(co_vector[2]):
+                                self.report({'WARNING'}, 'NaN position data detected in chunk ' + str(i) + " {" + obj.name + "}")
+                                if math.isnan(co_vector[0]): co_vector[0] = 0.0
+                                if math.isnan(co_vector[1]): co_vector[1] = 0.0
+                                if math.isnan(co_vector[2]): co_vector[2] = 0.0
+                                
                             #co_vector = EXPORT_GLOBAL_MATRIX @ obj.matrix_parent_inverse @ co_vector
 
                             geom.write(struct.pack("<fff", co_vector[0], co_vector[1], co_vector[2]))
