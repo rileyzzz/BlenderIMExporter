@@ -420,8 +420,6 @@ def write_file(self, filepath, objects, depsgraph, scene,
     for material, group in material_groups.items():
         print("Processing material")
         #per-chunk data
-        uv_dict = {}
-        uv = uv_key = uv_val = None
 
         unique_verts = []
         indices = []
@@ -455,8 +453,9 @@ def write_file(self, filepath, objects, depsgraph, scene,
             #should be final - edge split, etc
             vertgroups = obj.vertex_groups
 
-
-
+            #uv dictionary must be per object, otherwise duplicate objects (with similar normals and uvs) get merged
+            uv_dict = {}
+            uv = uv_key = uv_val = None
 
             for i, face in enumerate(obj_faces):
                 area += face.area
