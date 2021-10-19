@@ -169,7 +169,7 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX):
         end_chunk(chnk, bone)
 
 
-def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
+def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE):
     print("Writing .kin to " + filepath)
 
     scene = bpy.context.scene
@@ -196,7 +196,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
 
             rf.write('INFO'.encode('utf-8'))
             with io.BytesIO() as info:
-                chunk_ver(info, 100)
+                chunk_ver(info, 100 if not EXPORT_ANIM_SCALE else 257)
                 #FileName
                 jet_str(info, os.path.basename(filepath).lower())
                 #NumFrames
@@ -205,6 +205,11 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 info.write(struct.pack("<I", 30))
                 #MetricScale
                 info.write(struct.pack("<f", 1.0))
+
+                #Unknown
+                if EXPORT_ANIM_SCALE:
+                    info.write(struct.pack("<I", 2))
+
                 end_chunk(rf, info)
 
             #Events
@@ -237,7 +242,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
 
             objbones_flat = []
             for obj in bones_flat:
-                if hasattr(obj, 'type') and obj.type == 'EMPTY' or obj.type == 'LATTICE':
+                if hasattr(obj, 'type') and (obj.type == 'EMPTY' or obj.type == 'LATTICE'):
                     objbones_flat.append(obj)
 
                 #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
@@ -251,7 +256,13 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                 scene.frame_set(i)
                 rf.write('FRAM'.encode('utf-8'))
                 with io.BytesIO() as fram:
-                    chunk_ver(fram, 100)
+                    if not EXPORT_ANIM_SCALE:
+                        chunk_ver(fram, 100)
+                    else:
+                        chunk_ver(fram, 101)
+                    
+                    #version 101 fixes a lot of things - bone matrices are parent relative rather than global, and rotations aren't backwards anymore
+
                     #FrameNum
                     fram.write(struct.pack("<I", i))
                     #BoneDataList
@@ -261,16 +272,25 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                             mat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world
                         else:
                             mat = EXPORT_GLOBAL_MATRIX
-                        mat = mat @ pose_bone.matrix
-
+                        
+                        if not EXPORT_ANIM_SCALE:
+                            mat = mat @ pose_bone.matrix
+                        else:
+                            mat = mat @ pose_bone.matrix_basis
+                        
                         position, rotation, scale = mat.decompose()
-                        rotation = rotation.inverted()
+
+                        if not EXPORT_ANIM_SCALE:
+                            rotation = rotation.inverted()
+                        
                         #Position
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
-                        #Scale
-                        #fram.write(struct.pack("<fff", scale.x, scale.y, scale.z))
+
+                        if EXPORT_ANIM_SCALE:
+                            #Scale
+                            fram.write(struct.pack("<fff", scale.x, scale.y, scale.z))
 
                     for obj_bone in objbones_flat:
                         #objMat = obj_bone.matrix_world
@@ -279,21 +299,24 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                         #objMat = EXPORT_GLOBAL_MATRIX @ objMat
 
                         objMat = obj_bone.matrix_world
-                        #if obj_bone.parent is None:
-                            #objMat = obj_bone.matrix_world
-                        #else:
-                            #pbMat = obj_bone.matrix_local.copy() @ obj_bone.matrix_basis
-                            #objMat = obj_bone.parent.matrix_world.copy() @ pbMat
+
+                        if EXPORT_ANIM_SCALE:
+                            objMat = obj_bone.matrix_local
 
                         objMat = EXPORT_GLOBAL_MATRIX @ objMat
                         position, rotation, scale = objMat.decompose()
-                        rotation = rotation.inverted()
+
+                        if not EXPORT_ANIM_SCALE:
+                            rotation = rotation.inverted()
+                        
                         #Position
                         fram.write(struct.pack("<fff", *position))
                         #Orientation
                         fram.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
-                        #Scale
-                        #fram.write(struct.pack("<fff", scale.x, scale.y, scale.z))
+
+                        if EXPORT_ANIM_SCALE:
+                            #Scale
+                            fram.write(struct.pack("<fff", scale.x, scale.y, scale.z))
 
                     end_chunk(rf, fram)
 
@@ -308,6 +331,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_SUBSURF_AMBIENT=False,
                EXPORT_KIN=True,
                EXPORT_SKEL=False,
+               EXPORT_ANIM_SCALE=False,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
                EXPORT_PATH_MODE='AUTO',
@@ -531,7 +555,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 root_bone = ob
 
     if EXPORT_KIN:
-        write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
+        write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE)
         #write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
         #reset frame after writing kin, for object transforms
         scene.frame_set(0)
@@ -1001,6 +1025,7 @@ def _write(self, context, filepath,
            EXPORT_SUBSURF_AMBIENT,
            EXPORT_KIN,
            EXPORT_SKEL,
+           EXPORT_ANIM_SCALE,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
            EXPORT_PATH_MODE,
@@ -1038,6 +1063,7 @@ def _write(self, context, filepath,
                EXPORT_SUBSURF_AMBIENT,
                EXPORT_KIN,
                EXPORT_SKEL,
+               EXPORT_ANIM_SCALE,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
                EXPORT_PATH_MODE,
@@ -1058,6 +1084,7 @@ def save(self, context,
          subsurf_ambient=False,
          use_kin=True,
          use_skel=False,
+         export_anim_scale=False,
          global_matrix=None,
          path_mode='AUTO'
          ):
@@ -1071,6 +1098,7 @@ def save(self, context,
            EXPORT_SUBSURF_AMBIENT=subsurf_ambient,
            EXPORT_KIN=use_kin,
            EXPORT_SKEL=use_skel,
+           EXPORT_ANIM_SCALE=export_anim_scale,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
            EXPORT_PATH_MODE=path_mode,

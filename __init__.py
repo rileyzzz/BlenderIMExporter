@@ -122,7 +122,11 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=False,
             )
 
-
+    export_anim_scale: BoolProperty(
+        name="Export Scaling Data",
+        description="Export additional scaling data in animations (only supported in TANE+)",
+        default=False,
+        )
 
     global_scale: FloatProperty(
             name="Scale",
@@ -244,6 +248,7 @@ class IM_PT_export_animation(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, 'use_skel')
+        layout.prop(operator, 'export_anim_scale')
 
 def menu_func_export(self, context):
     self.layout.operator(ExportIM.bl_idname, text="Indexed Mesh (.im)")
