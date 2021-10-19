@@ -408,6 +408,11 @@ def write_file(self, filepath, objects, depsgraph, scene,
         for mat in materials:
             if mat not in material_groups:
                 material_groups[mat] = []
+
+            #if the material doesn't have any faces assigned to it, don't bother giving it a chunk
+            if mat not in mats_2_faces:
+                continue
+
             obj_data = {
                 "me": me,
                 "obj": final,
