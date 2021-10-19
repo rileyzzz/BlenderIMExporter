@@ -1003,8 +1003,21 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     atch.write(struct.pack("<I", len(attachments)))
                     #Attachments
                     for att in attachments:
+
+                        att_name = att.name
+
+                        att_parent_name = ""
+                        if att.parent is not None and "b.r." in att.parent.name:
+                            att_parent_name = att.parent.name
+                        elif att.parent_bone is not None and "b.r." in att.parent_bone:
+                            att_parent_name = att.parent_bone
+                        
+                        #attachment parent bones
+                        if(not "/" in att_name):
+                            att_name = "a." + att_parent_name[2:] + "/" + att_name
+                        
                         #Name
-                        jet_str(atch, att.name)
+                        jet_str(atch, att_name)
 
                         attMat = EXPORT_GLOBAL_MATRIX @ att.matrix_world
                         loc, rot, scale = attMat.decompose()
