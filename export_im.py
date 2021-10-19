@@ -175,6 +175,10 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
     scene = bpy.context.scene
     NumFrames = scene.frame_end - scene.frame_start + 1
 
+    use_relative_positioning = False
+    if EXPORT_ANIM_SCALE:
+        use_relative_positioning = True
+    
     #preprocess
     root_bone = None
     for key in bones:
@@ -196,7 +200,9 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
 
             rf.write('INFO'.encode('utf-8'))
             with io.BytesIO() as info:
-                chunk_ver(info, 100 if not EXPORT_ANIM_SCALE else 257)
+                flags_needed = EXPORT_ANIM_SCALE or use_relative_positioning
+
+                chunk_ver(info, 100 if not flags_needed else 102)
                 #FileName
                 jet_str(info, os.path.basename(filepath).lower())
                 #NumFrames
@@ -206,9 +212,17 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
                 #MetricScale
                 info.write(struct.pack("<f", 1.0))
 
-                #Unknown
-                if EXPORT_ANIM_SCALE:
-                    info.write(struct.pack("<I", 2))
+                #Flags
+                if flags_needed:
+                    flags = 0
+
+                    if EXPORT_ANIM_SCALE:
+                        flags |= 0x2
+                    if use_relative_positioning:
+                        flags |= 0x1
+                        flags |= 0x8
+                    
+                    info.write(struct.pack("<I", flags))
 
                 end_chunk(rf, info)
 
@@ -273,10 +287,10 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
                         else:
                             mat = EXPORT_GLOBAL_MATRIX
                         
-                        if not EXPORT_ANIM_SCALE:
+                        if not use_relative_positioning or pose_bone.parent is None:
                             mat = mat @ pose_bone.matrix
                         else:
-                            mat = mat @ pose_bone.matrix_basis
+                            mat = mat @ pose_bone.parent.matrix.inverted() @ pose_bone.matrix
                         
                         position, rotation, scale = mat.decompose()
 
@@ -300,7 +314,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
 
                         objMat = obj_bone.matrix_world
 
-                        if EXPORT_ANIM_SCALE:
+                        if use_relative_positioning:
                             objMat = obj_bone.matrix_local
 
                         objMat = EXPORT_GLOBAL_MATRIX @ objMat
@@ -396,7 +410,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
         #idx2idxmap = {}
         print("Processing mesh...")
 
-        vertgroups = obj.vertex_groups
+        #should be final - edge split, etc
+        vertgroups = final.vertex_groups
 
         #split into materials
         materials = me.materials[:]
@@ -448,14 +463,15 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #wasCopied[loop.vertex_index] = len(unique_verts)
                         uv_dict[uv_key] = len(unique_verts)
 
-                        influences = []
+                        influences = {}
                         for group in vertgroups:
                             try:
                                 weight = group.weight(loop.vertex_index)
                             except RuntimeError:
                                 weight = 0.0
                             if weight != 0.0:
-                                influences.append([group.name, weight])
+                                # influences.append([group.name, weight])
+                                influences[group.name] = weight
 
                         unique_verts.append([vert.co[:], uv[:], influences])
                         #normals.append(vert.normal.normalized())
@@ -843,9 +859,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
 
                             #BoneTransform = None #identity?
-                            for influence in influences:
-                                name = influence[0]
-                                weight = influence[1]
+                            for name, weight in influences.items():
                                 if name in bones:
                                     bonegroup = bones[name]
                                     bone = bonegroup[0]
