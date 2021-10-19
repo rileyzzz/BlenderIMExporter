@@ -129,6 +129,45 @@ def recursive_writebone(chnk, srcBone, bones_flat):
             recursive_writebone(bone, child, bones_flat)
         end_chunk(chnk, bone)
 
+#Recursive SKEL for embedded .im export
+def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX):
+    relevant_children = []
+    for child in srcBone.children:
+        if "b.r." in child.name:
+            relevant_children.append(child)
+
+    chnk.write('BONE'.encode('utf-8'))
+    with io.BytesIO() as bone:
+        chunk_ver(bone, 100)
+        #BoneName
+        jet_str(bone, srcBone.name)
+
+        if srcBone.parent == None:
+            boneMat = srcBone.matrix_local
+        else:
+            boneMat = srcBone.parent.matrix_local.inverted() @ srcBone.matrix_local
+
+        if armature != None:
+            boneMat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world @ boneMat
+        else:
+            boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+
+        position, rotation, scale = boneMat.decompose()
+        rotation = rotation.inverted()
+
+        #Position
+        bone.write(struct.pack("<fff", *position))
+        #Orientation
+        bone.write(struct.pack("<ffff", rotation.x, rotation.y, rotation.z, rotation.w))
+
+        #NumChildren
+        bone.write(struct.pack("<I", len(relevant_children)))
+
+        #BoneList
+        for child in relevant_children:
+            recursive_writebone_skel(bone, child, armature, EXPORT_GLOBAL_MATRIX)
+        end_chunk(chnk, bone)
+
 
 def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
     print("Writing .kin to " + filepath)
@@ -218,7 +257,12 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX):
                     #BoneDataList
                     for pose_bone in posebones_flat:
                         #mat = pose_bone.matrix_basis
-                        mat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world @ pose_bone.matrix
+                        if armature != None:
+                            mat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world
+                        else:
+                            mat = EXPORT_GLOBAL_MATRIX
+                        mat = mat @ pose_bone.matrix
+
                         position, rotation, scale = mat.decompose()
                         rotation = rotation.inverted()
                         #Position
@@ -263,6 +307,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_BOUNDS=True,
                EXPORT_SUBSURF_AMBIENT=False,
                EXPORT_KIN=True,
+               EXPORT_SKEL=False,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
                EXPORT_PATH_MODE='AUTO',
@@ -821,87 +866,93 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     end_chunk(rf, attr)
                 bpy.data.materials.remove(defaultMaterial)
 
+            if not EXPORT_SKEL:
+                rf.write('INFL'.encode('utf-8'))
+                with io.BytesIO() as infl:
+                    chunk_ver(infl, 100)
 
-            rf.write('INFL'.encode('utf-8'))
-            with io.BytesIO() as infl:
-                chunk_ver(infl, 100)
+                    #NumBones
+                    infl.write(struct.pack("<I", len(bones)))
+                    #Bones
+                    for key in bones:
+                        bonegroup = bones[key]
+                        bone = bonegroup[0]
+                        chunkinfl = bonegroup[1] # per chunk influences
 
-                #NumBones
-                infl.write(struct.pack("<I", len(bones)))
-                #Bones
-                for key in bones:
-                    bonegroup = bones[key]
-                    bone = bonegroup[0]
-                    chunkinfl = bonegroup[1] # per chunk influences
-
-                    #Name
-                    jet_str(infl, bone.name)
-                    #Parent
-                    if bone.parent != None:
-                        jet_str(infl, bone.parent.name)
-                    else:
-                        infl.write(struct.pack("<I", 0))
-
-                    if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
-                        print("BONE TYPE")
-                        if bone.parent == None:
-                            boneMat = bone.matrix_local
+                        #Name
+                        jet_str(infl, bone.name)
+                        #Parent
+                        if bone.parent != None:
+                            jet_str(infl, bone.parent.name)
                         else:
-                            boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-                        boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
-                    else:
-                        print("NOT BONE TYPE")
-                        #boneMat = bone.matrix_local
-                        #boneMat = mathutils.Matrix.Identity(4)
-                        if bone.parent == None:
-                            print("no parent")
-                            boneMat = bone.matrix_world
+                            infl.write(struct.pack("<I", 0))
+
+                        if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
+                            print("BONE TYPE")
+                            if bone.parent == None:
+                                boneMat = bone.matrix_local
+                            else:
+                                boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
+                            boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
                         else:
-                            print("bone " + bone.name + " parent " + bone.parent.name)
-                            boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                            print("NOT BONE TYPE")
                             #boneMat = bone.matrix_local
-                            #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
-                        boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+                            #boneMat = mathutils.Matrix.Identity(4)
+                            if bone.parent == None:
+                                print("no parent")
+                                boneMat = bone.matrix_world
+                            else:
+                                print("bone " + bone.name + " parent " + bone.parent.name)
+                                boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                                #boneMat = bone.matrix_local
+                                #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
+                            boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
 
-                    #boneMat = bone.matrix_local
-                    loc, rot, scale = boneMat.decompose()
+                        #boneMat = bone.matrix_local
+                        loc, rot, scale = boneMat.decompose()
 
-                    #rot = mathutils.Quaternion()
+                        #rot = mathutils.Quaternion()
 
-                    #LocalPosition
-                    #infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
-                    infl.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
-                    print("bone " + bone.name + " location: " + str(loc[0]) + " " + str(loc[1]) + " " + str(loc[2]))
-                    #infl.write(struct.pack("<fff", 0.0, 0.0, 5.0))
-                    #LocalOrientation
-                    print("bone " + bone.name + " rotation: " + str(rot.x) + " " + str(rot.y) + " " + str(rot.z) + " " + str(rot.w))
+                        #LocalPosition
+                        #infl.write(struct.pack("<fff", bone.head[0], bone.head[1], bone.head[2]))
+                        infl.write(struct.pack("<fff", loc[0], loc[1], loc[2]))
+                        print("bone " + bone.name + " location: " + str(loc[0]) + " " + str(loc[1]) + " " + str(loc[2]))
+                        #infl.write(struct.pack("<fff", 0.0, 0.0, 5.0))
+                        #LocalOrientation
+                        print("bone " + bone.name + " rotation: " + str(rot.x) + " " + str(rot.y) + " " + str(rot.z) + " " + str(rot.w))
 
-                    rotationMat = rot.to_matrix().transposed()
-                    #rotationMat = rot.to_matrix()
-                    infl.write(struct.pack("<fffffffff", *rotationMat[0], *rotationMat[1], *rotationMat[2]))
+                        rotationMat = rot.to_matrix().transposed()
+                        #rotationMat = rot.to_matrix()
+                        infl.write(struct.pack("<fffffffff", *rotationMat[0], *rotationMat[1], *rotationMat[2]))
 
-                    necessary_infl = []
-                    for influencelist in chunkinfl:
-                        #if len(influencelist) > 0:
-                        necessary_infl.append(influencelist)
+                        necessary_infl = []
+                        for influencelist in chunkinfl:
+                            #if len(influencelist) > 0:
+                            necessary_infl.append(influencelist)
 
-                    #NumInfluences
-                    infl.write(struct.pack("<I", len(necessary_infl)))
-                    #Influences
-                    for i, influencelist in enumerate(necessary_infl):
-                        #ChunkIndex
-                        infl.write(struct.pack("<I", i))
-                        #NumVertices
-                        infl.write(struct.pack("<I", len(influencelist)))
-                        for influence in influencelist:
-                            #Index
-                            infl.write(struct.pack("<I", influence[0]))
-                            #Weight
-                            infl.write(struct.pack("<f", influence[1]))
-                            #Position
-                            vertpos = influence[2]
-                            infl.write(struct.pack("<fff", vertpos[0], vertpos[1], vertpos[2]))
-                end_chunk(rf, infl)
+                        #NumInfluences
+                        infl.write(struct.pack("<I", len(necessary_infl)))
+                        #Influences
+                        for i, influencelist in enumerate(necessary_infl):
+                            #ChunkIndex
+                            infl.write(struct.pack("<I", i))
+                            #NumVertices
+                            infl.write(struct.pack("<I", len(influencelist)))
+                            for influence in influencelist:
+                                #Index
+                                infl.write(struct.pack("<I", influence[0]))
+                                #Weight
+                                infl.write(struct.pack("<f", influence[1]))
+                                #Position
+                                vertpos = influence[2]
+                                infl.write(struct.pack("<fff", vertpos[0], vertpos[1], vertpos[2]))
+                    end_chunk(rf, infl)
+            else:
+                rf.write('SKEL'.encode('utf-8'))
+                with io.BytesIO() as skel:
+                    chunk_ver(skel, 100)
+                    recursive_writebone_skel(skel, root_bone, active_armature, EXPORT_GLOBAL_MATRIX)
+                    end_chunk(rf, skel)
 
             #AttachmentInfo
             if len(attachments) > 0:
@@ -949,6 +1000,7 @@ def _write(self, context, filepath,
            EXPORT_WIDE_STRINGS,
            EXPORT_SUBSURF_AMBIENT,
            EXPORT_KIN,
+           EXPORT_SKEL,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
            EXPORT_PATH_MODE,
@@ -985,6 +1037,7 @@ def _write(self, context, filepath,
                EXPORT_BOUNDS,
                EXPORT_SUBSURF_AMBIENT,
                EXPORT_KIN,
+               EXPORT_SKEL,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
                EXPORT_PATH_MODE,
@@ -1004,6 +1057,7 @@ def save(self, context,
          use_wide_strings=False,
          subsurf_ambient=False,
          use_kin=True,
+         use_skel=False,
          global_matrix=None,
          path_mode='AUTO'
          ):
@@ -1016,6 +1070,7 @@ def save(self, context,
            EXPORT_WIDE_STRINGS=use_wide_strings,
            EXPORT_SUBSURF_AMBIENT=subsurf_ambient,
            EXPORT_KIN=use_kin,
+           EXPORT_SKEL=use_skel,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
            EXPORT_PATH_MODE=path_mode,

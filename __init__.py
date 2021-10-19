@@ -116,6 +116,13 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=True,
             )
 
+    use_skel: BoolProperty(
+            name="Use Alternate SKEL Hierarchy",
+            description="Use a SKEL hierarchy instead of INFL to store bone data. Will break skinning, but can reduce file size",
+            default=False,
+            )
+
+
 
     global_scale: FloatProperty(
             name="Scale",
@@ -180,7 +187,7 @@ class IM_PT_export_include(bpy.types.Panel):
         layout.prop(operator, 'export_bounds')
         layout.prop(operator, 'use_wide_strings')
         layout.prop(operator, 'subsurf_ambient')
-        layout.prop(operator, 'use_kin')
+        #layout.prop(operator, 'use_kin')
 
 
 class IM_PT_export_geometry(bpy.types.Panel):
@@ -209,7 +216,34 @@ class IM_PT_export_geometry(bpy.types.Panel):
         layout.prop(operator, 'path_mode')
         #layout.prop(operator, 'use_triangles')
 
+class IM_PT_export_animation(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "Animation"
+    bl_parent_id = "FILE_PT_operator"
 
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "EXPORT_SCENE_OT_im"
+
+    def draw_header(self, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        self.layout.prop(operator, 'use_kin', text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, 'use_skel')
 
 def menu_func_export(self, context):
     self.layout.operator(ExportIM.bl_idname, text="Indexed Mesh (.im)")
@@ -219,6 +253,7 @@ classes = (
     ExportIM,
     IM_PT_export_include,
     IM_PT_export_geometry,
+    IM_PT_export_animation
 )
 
 
