@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 3, 2),
+    "version": (1, 3, 3),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -109,6 +109,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             description="Export the Principled BSDF Subsurface Color as the material ambient",
             default=False,
             )
+    
+    mat_custom_properties: BoolProperty(
+            name="Custom Material Properties",
+            description="Exports the user-defined custom property data of materials",
+            default=False,
+            )
 
     use_kin: BoolProperty(
             name="Export Animation",
@@ -123,16 +129,16 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             )
 
     export_anim_scale: BoolProperty(
-        name="Export Scaling Data",
-        description="Export additional scaling data in animations",
-        default=False,
-        )
+            name="Export Scaling Data",
+            description="Export additional scaling data in animations",
+            default=False,
+            )
 
     use_relative_positioning: BoolProperty(
-        name="Use Relative Positioning",
-        description="Use relative positioning in animation data. (Only supported in TANE+)",
-        default=False,
-        )
+            name="Use Relative Positioning",
+            description="Use relative positioning in animation data. (Only supported in TANE+)",
+            default=False,
+            )
 
     global_scale: FloatProperty(
             name="Scale",
@@ -197,6 +203,7 @@ class IM_PT_export_include(bpy.types.Panel):
         layout.prop(operator, 'export_bounds')
         layout.prop(operator, 'use_wide_strings')
         layout.prop(operator, 'subsurf_ambient')
+        layout.prop(operator, 'mat_custom_properties')
         #layout.prop(operator, 'use_kin')
 
 

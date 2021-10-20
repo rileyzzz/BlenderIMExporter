@@ -344,6 +344,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_TANGENTS=True,
                EXPORT_BOUNDS=True,
                EXPORT_SUBSURF_AMBIENT=False,
+               EXPORT_CUSTOM_PROPERTIES=False,
                EXPORT_KIN=True,
                EXPORT_SKEL=False,
                EXPORT_ANIM_SCALE=False,
@@ -717,9 +718,23 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         chunk_ver(matl, 103)
                         #Name
                         jet_str(matl, mat.name)
-                        #NumProperties
-                        matl.write(struct.pack("<I", 0))
 
+                        custom_properties = {}
+                        if EXPORT_CUSTOM_PROPERTIES:
+                            for K in mat.keys():
+                                data = mat[K]
+                                if K not in '_RNA_UI' and (isinstance(data, float) or isinstance(data, int) or isinstance(data, str) or isinstance(data, bool)):
+                                    if not isinstance(data, str):
+                                        data = str(data)
+                                    custom_properties[K] = data
+                        
+                        #NumProperties
+                        #matl.write(struct.pack("<I", 0))
+                        matl.write(struct.pack("<I", len(custom_properties)))
+                        for k in custom_properties:
+                            jet_str(matl, k)
+                            jet_str(matl, custom_properties[k])
+                        
                         #nodes
                         mat_wrap = node_shader_utils.PrincipledBSDFWrapper(mat)
 
@@ -1088,6 +1103,7 @@ def _write(self, context, filepath,
            EXPORT_BOUNDS,
            EXPORT_WIDE_STRINGS,
            EXPORT_SUBSURF_AMBIENT,
+           EXPORT_CUSTOM_PROPERTIES,
            EXPORT_KIN,
            EXPORT_SKEL,
            EXPORT_ANIM_SCALE,
@@ -1127,6 +1143,7 @@ def _write(self, context, filepath,
                EXPORT_TANGENTS,
                EXPORT_BOUNDS,
                EXPORT_SUBSURF_AMBIENT,
+               EXPORT_CUSTOM_PROPERTIES,
                EXPORT_KIN,
                EXPORT_SKEL,
                EXPORT_ANIM_SCALE,
@@ -1149,6 +1166,7 @@ def save(self, context,
          export_bounds=True,
          use_wide_strings=False,
          subsurf_ambient=False,
+         mat_custom_properties=False,
          use_kin=True,
          use_skel=False,
          export_anim_scale=False,
@@ -1164,6 +1182,7 @@ def save(self, context,
            EXPORT_BOUNDS=export_bounds,
            EXPORT_WIDE_STRINGS=use_wide_strings,
            EXPORT_SUBSURF_AMBIENT=subsurf_ambient,
+           EXPORT_CUSTOM_PROPERTIES=mat_custom_properties,
            EXPORT_KIN=use_kin,
            EXPORT_SKEL=use_skel,
            EXPORT_ANIM_SCALE=export_anim_scale,
