@@ -343,6 +343,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_TEXTURETXT=True,
                EXPORT_TANGENTS=True,
                EXPORT_BOUNDS=True,
+               EXPORT_NEIGHBOR_INFO=False,
                EXPORT_SUBSURF_AMBIENT=False,
                EXPORT_CUSTOM_PROPERTIES=False,
                EXPORT_KIN=True,
@@ -414,6 +415,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
         me.calc_loop_triangles()
 
         mats_2_faces = {}
+        edges_2_faces = {}
+
         for face in me.loop_triangles:
             mat_index = face.material_index
             if mat_index is None:
@@ -422,6 +425,13 @@ def write_file(self, filepath, objects, depsgraph, scene,
             if mat not in mats_2_faces:
                 mats_2_faces[mat] = []
             mats_2_faces[mat].append(face)
+
+            if EXPORT_NEIGHBOR_INFO:
+                for l in face.loops:
+                    edge_index = me.loops[l].edge_index
+                    if not edge_index in edges_2_faces:
+                        edges_2_faces[edge_index] = []
+                    edges_2_faces[edge_index].append(face)
         
         for mat in materials:
             mat_key = mat, use_tangents
@@ -437,12 +447,15 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 "me": me,
                 "obj": final,
                 "materials": materials,
-                "faces": mats_2_faces[mat]
+                "faces": mats_2_faces[mat],
+                "edges_2_faces": edges_2_faces
             }
 
             material_groups[mat_key].append(obj_data)
-        
-    
+
+    neighbor_map = {}
+    face_2_index_map = {}
+
     for mat_key, group in material_groups.items():
         material = mat_key[0]
         use_tangents = mat_key[1]
@@ -453,6 +466,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
         indices = []
         normals = []
         face_normals = []
+        face_list = []
         tangents = []
 
         area = 0.0
@@ -462,6 +476,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
             obj = obj_data["obj"]
             materials = obj_data["materials"]
             obj_faces = obj_data["faces"]
+            edges_2_faces = obj_data["edges_2_faces"]
 
             if len(me.uv_layers) == 0:
                 uv_layer = None
@@ -489,6 +504,19 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 area += face.area
 
                 face_normals.append(face.normal.normalized())
+
+                neighbors = []
+
+                if EXPORT_NEIGHBOR_INFO:
+                    #store the face's parent chunk
+                    neighbor_map[face] = [f for e in face.loops
+                        for f in edges_2_faces[me.loops[e].edge_index] if f is not face]
+                    face_2_index_map[face] = {
+                        "index": len(face_list),
+                        "attribute": len(meshes)
+                    }
+                    face_list.append(face)
+
 
                 for uv_index, l_index in enumerate(face.loops):
                     loop = me.loops[l_index]
@@ -534,23 +562,32 @@ def write_file(self, filepath, objects, depsgraph, scene,
                                 bounds_max = mathutils.Vector(vert.co)
 
                     indices.append(uv_dict[uv_key])
+                
+
 
                 if len(unique_verts) > 65532 or len(indices) // 3 > 65535:
                     #apply and update
-                    meshes.append([obj, material,
-                                unique_verts.copy(),
-                                indices.copy(),
-                                normals.copy(),
-                                face_normals.copy(),
-                                tangents.copy(),
-                                area,
-                                uv_layer,
-                                objectParent])
+                    mesh_data = {
+                        "obj": obj,
+                        "material": material,
+                        "unique_verts": unique_verts.copy(),
+                        "indices": indices.copy(),
+                        "normals": normals.copy(),
+                        "face_normals": face_normals.copy(),
+                        "face_list": face_list.copy(),
+                        "tangents": tangents.copy(),
+                        "area": area,
+                        "uv_layer": uv_layer,
+                        "parent": objectParent
+                    }
+
+                    meshes.append(mesh_data)
 
                     unique_verts.clear()
                     indices.clear()
                     normals.clear()
                     face_normals.clear()
+                    face_list.clear()
                     tangents.clear()
                     area = 0.0
                     uv_dict.clear()
@@ -559,15 +596,21 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
         #Add remaining verts
         if len(unique_verts) > 0:
-            meshes.append([obj, material,
-                        unique_verts.copy(),
-                        indices.copy(),
-                        normals.copy(),
-                        face_normals.copy(),
-                        tangents.copy(),
-                        area,
-                        uv_layer,
-                        objectParent])
+            mesh_data = {
+                "obj": obj,
+                "material": material,
+                "unique_verts": unique_verts.copy(),
+                "indices": indices.copy(),
+                "normals": normals.copy(),
+                "face_normals": face_normals.copy(),
+                "face_list": face_list.copy(),
+                "tangents": tangents.copy(),
+                "area": area,
+                "uv_layer": uv_layer,
+                "parent": objectParent
+            }
+            meshes.append(mesh_data)
+
         print("Complete.")
 
         #bm.free()
@@ -672,28 +715,18 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
             for i, entry in enumerate(meshes):
 
-                obj = entry[0]
-                #mesh = entry[1]
-                #uv_layer = entry[2]
-##                [obj, materials[i]
-#                               unique_verts.copy(),
-#                               indices.copy(),
-#                               normals.copy(),
-#                               face_normals.copy(),
-#                               area,
-#                               uv_layer]
-                mat = entry[1]
-                verts = entry[2]
-                indices = entry[3]
-                normals = entry[4]
-                face_normals = entry[5]
-                tangents = entry[6]
-                area = entry[7]
-                uv_layer = entry[8]
-                objParent = entry[9]
-                #uv_layer = mesh.uv_layers.active.data
-                #mesh_triangulate(mesh)
-                #mat = obj.active_material
+                obj             = entry["obj"]
+                mat             = entry["material"]
+                verts           = entry["unique_verts"]
+                indices         = entry["indices"]
+                normals         = entry["normals"]
+                face_normals    = entry["face_normals"]
+                face_list       = entry["face_list"]
+                tangents        = entry["tangents"]
+                area            = entry["area"]
+                uv_layer        = entry["uv_layer"]
+                objParent       = entry["parent"]
+
 
                 defaultMaterial = bpy.data.materials.new(obj.name + ".m.notex")
                 if mat is None:
@@ -953,6 +986,26 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #bm.free()
 
                         end_chunk(attr, geom)
+                    
+                    if EXPORT_NEIGHBOR_INFO:
+                        attr.write('NINF'.encode('utf-8'))
+                        with io.BytesIO() as ninf:
+                            chunk_ver(ninf, 100)
+                            for face in face_list:
+                                neighbors = neighbor_map[face]
+                                for i in range(3):
+                                    primitiveIndex = 0xFFFF
+                                    neighborChunkIdx = 0xFFFF
+                                    if i < len(neighbors):
+                                        face_data = face_2_index_map[neighbors[i]]
+                                        primitiveIndex = face_data["index"]
+                                        neighborChunkIdx = face_data["attribute"]
+                                    
+                                    ninf.write(struct.pack("<H", primitiveIndex))
+                                    ninf.write(struct.pack("<H", neighborChunkIdx))
+                            
+                            end_chunk(attr, ninf)
+                    
                     end_chunk(rf, attr)
                 bpy.data.materials.remove(defaultMaterial)
 
@@ -1101,6 +1154,7 @@ def _write(self, context, filepath,
            EXPORT_TEXTURETXT,
            EXPORT_TANGENTS,
            EXPORT_BOUNDS,
+           EXPORT_NEIGHBOR_INFO,
            EXPORT_WIDE_STRINGS,
            EXPORT_SUBSURF_AMBIENT,
            EXPORT_CUSTOM_PROPERTIES,
@@ -1142,6 +1196,7 @@ def _write(self, context, filepath,
                EXPORT_TEXTURETXT,
                EXPORT_TANGENTS,
                EXPORT_BOUNDS,
+               EXPORT_NEIGHBOR_INFO,
                EXPORT_SUBSURF_AMBIENT,
                EXPORT_CUSTOM_PROPERTIES,
                EXPORT_KIN,
@@ -1164,6 +1219,7 @@ def save(self, context,
          use_texturetxt=True,
          export_tangents=True,
          export_bounds=True,
+         export_neighbor_info=False,
          use_wide_strings=False,
          subsurf_ambient=False,
          mat_custom_properties=False,
@@ -1180,6 +1236,7 @@ def save(self, context,
            EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_TANGENTS=export_tangents,
            EXPORT_BOUNDS=export_bounds,
+           EXPORT_NEIGHBOR_INFO=export_neighbor_info,
            EXPORT_WIDE_STRINGS=use_wide_strings,
            EXPORT_SUBSURF_AMBIENT=subsurf_ambient,
            EXPORT_CUSTOM_PROPERTIES=mat_custom_properties,

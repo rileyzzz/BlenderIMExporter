@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 3, 3),
+    "version": (1, 3, 4),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -96,6 +96,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             name="Export Bounding Box",
             description="Export bounding box data",
             default=True,
+            )
+
+    export_neighbor_info: BoolProperty(
+            name="Export Adjacency Data",
+            description="Export triangle adjacency information (used by progressive meshes). Requires triangulated geometry. This can be slow",
+            default=False,
             )
 
     use_wide_strings: BoolProperty(
@@ -201,6 +207,7 @@ class IM_PT_export_include(bpy.types.Panel):
         layout.prop(operator, 'use_texturetxt')
         layout.prop(operator, 'export_tangents')
         layout.prop(operator, 'export_bounds')
+        layout.prop(operator, 'export_neighbor_info')
         layout.prop(operator, 'use_wide_strings')
         layout.prop(operator, 'subsurf_ambient')
         layout.prop(operator, 'mat_custom_properties')
