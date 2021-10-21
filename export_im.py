@@ -388,10 +388,14 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
         #uv_layer = me.uv_layers.active.data
         #mesh_triangulate(me)
-
+        objectParent = None #empty and lattice parents
+        if obj.parent != None:
+            if "b.r." in obj.parent.name:
+                objectParent = obj.parent
+        
         print("Pre-processing object " + obj.name)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
-
+        
         me.calc_normals_split()
 
         use_tangents = EXPORT_TANGENTS
@@ -434,7 +438,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     edges_2_faces[edge_index].append(face)
         
         for mat in materials:
-            mat_key = mat, use_tangents
+            #if objects have a different parent (animation) they shouldn't be collated
+            mat_key = mat, use_tangents, objectParent
 
             if mat_key not in material_groups:
                 material_groups[mat_key] = []
@@ -448,7 +453,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 "obj": final,
                 "materials": materials,
                 "faces": mats_2_faces[mat],
-                "edges_2_faces": edges_2_faces
+                "edges_2_faces": edges_2_faces,
+                "parent": objectParent
             }
 
             material_groups[mat_key].append(obj_data)
@@ -477,6 +483,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
             materials = obj_data["materials"]
             obj_faces = obj_data["faces"]
             edges_2_faces = obj_data["edges_2_faces"]
+            objectParent = obj_data["parent"]
 
             if len(me.uv_layers) == 0:
                 uv_layer = None
@@ -485,11 +492,6 @@ def write_file(self, filepath, objects, depsgraph, scene,
             me_verts = me.vertices[:]
             me_edges = me.edges[:]
 
-
-            objectParent = None #empty and lattice parents
-            if obj.parent != None:
-                if "b.r." in obj.parent.name:
-                    objectParent = obj.parent
 
             print("Processing mesh...")
 
