@@ -337,9 +337,117 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
 
             end_chunk(f, rf)
 
+def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set, meshes):
+
+    if len(me.uv_layers) == 0:
+        uv_layer = None
+    else:
+        uv_layer = me.uv_layers.active.data[:]
+
+    print("Processing curve...")
+
+    #should be final - edge split, etc
+    vertgroups = obj.vertex_groups
+
+    #uv dictionary must be per object, otherwise duplicate objects (with similar normals and uvs) get merged
+    uv_dict = {}
+    uv = uv_key = uv_val = None
+    
+    unique_verts = []
+    indices = []
+    normals = []
+
+    for i, edge in enumerate(me.edges):
+        for v in edge.vertices:
+            vert = me.vertices[v]
+
+            #texcoords are transformed 1.0 - y
+            uv = [0, 1]
+            no = vert.normal
+
+            uv_key = v, veckey3d(no)
+            uv_val = uv_dict.get(uv_key)
+
+            if uv_val is None:
+                uv_dict[uv_key] = len(unique_verts)
+
+                influences = {}
+                for group in vertgroups:
+                    try:
+                        weight = group.weight(v)
+                    except RuntimeError:
+                        weight = 0.0
+                    if weight != 0.0:
+                        influences[group.name] = weight
+
+                unique_verts.append([vert.co[:], uv[:], influences])
+                normals.append(no.normalized())
+                
+                if EXPORT_BOUNDS:
+                    if bounds_set:
+                        bounds_min.x = min(bounds_min.x, vert.co.x)
+                        bounds_min.y = min(bounds_min.y, vert.co.y)
+                        bounds_min.z = min(bounds_min.z, vert.co.z)
+                        bounds_max.x = max(bounds_max.x, vert.co.x)
+                        bounds_max.y = max(bounds_max.y, vert.co.y)
+                        bounds_max.z = max(bounds_max.z, vert.co.z)
+                    else:
+                        bounds_set = True
+                        bounds_min = mathutils.Vector(vert.co)
+                        bounds_max = mathutils.Vector(vert.co)
+
+            indices.append(uv_dict[uv_key])
+
+        if len(unique_verts) > 65532 or len(indices) // 3 > 65535:
+            #apply and update
+            mesh_data = {
+                "obj": obj,
+                "material": material,
+                "unique_verts": unique_verts.copy(),
+                "indices": indices.copy(),
+                "normals": normals.copy(),
+                "face_normals": [],
+                "face_list": [],
+                "tangents": [],
+                "area": 0.0,
+                "uv_layer": uv_layer,
+                "parent": objectParent,
+                "is_curve": True
+            }
+
+            meshes.append(mesh_data)
+
+            unique_verts.clear()
+            indices.clear()
+            normals.clear()
+
+            uv_dict.clear()
+            uv = uv_key = uv_val = None
+            print("Block split.")
+
+    if len(unique_verts) > 0:
+        mesh_data = {
+            "obj": obj,
+            "material": material,
+            "unique_verts": unique_verts.copy(),
+            "indices": indices.copy(),
+            "normals": normals.copy(),
+            "face_normals": [],
+            "face_list": [],
+            "tangents": [],
+            "area": 0.0,
+            "uv_layer": uv_layer,
+            "parent": objectParent,
+            "is_curve": True
+        }
+
+        meshes.append(mesh_data)
+
+
 
 def write_file(self, filepath, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS=True,
+               EXPORT_CURVES=False,
                EXPORT_TEXTURETXT=True,
                EXPORT_TANGENTS=True,
                EXPORT_BOUNDS=True,
@@ -368,12 +476,14 @@ def write_file(self, filepath, objects, depsgraph, scene,
     bounds_max = mathutils.Vector((0.0, 0.0, 0.0))
 
     material_groups = {}
+    curves = []
 
     for obj in objects:
 
         #curves can be converted into meshes
-        #consider removing this if we want to support line primitives at some point
-        if obj.type == 'CURVE':
+        is_curve = obj.type == 'CURVE'
+
+        if not EXPORT_CURVES and is_curve:
             continue
 
         final = obj.evaluated_get(depsgraph) if EXPORT_APPLY_MODIFIERS else obj.original
@@ -415,6 +525,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
         print("object contains " + str(len(materials)) + " materials")
         if len(materials) == 0:
             materials.append(None)
+
+        if EXPORT_CURVES and is_curve:
+            gather_curve_data(me, obj, objectParent, materials[0], EXPORT_BOUNDS, bounds_set, meshes)
+            continue
         
         me.calc_loop_triangles()
 
@@ -580,7 +694,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         "tangents": tangents.copy(),
                         "area": area,
                         "uv_layer": uv_layer,
-                        "parent": objectParent
+                        "parent": objectParent,
+                        "is_curve": False
                     }
 
                     meshes.append(mesh_data)
@@ -609,7 +724,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 "tangents": tangents.copy(),
                 "area": area,
                 "uv_layer": uv_layer,
-                "parent": objectParent
+                "parent": objectParent,
+                "is_curve": False
             }
             meshes.append(mesh_data)
 
@@ -728,6 +844,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
                 area            = entry["area"]
                 uv_layer        = entry["uv_layer"]
                 objParent       = entry["parent"]
+                is_curve        = entry["is_curve"]
 
 
                 defaultMaterial = bpy.data.materials.new(obj.name + ".m.notex")
@@ -885,7 +1002,11 @@ def write_file(self, filepath, objects, depsgraph, scene,
 #                            facenormals.append(face.normal)
 
                         #Flags
-                        geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
+                        if not is_curve:
+                            geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
+                        else:
+                            geom.write(struct.pack("<I", 2)) #GC_LINES
+                        
                         #UseTangents (201)
                         if EXPORT_TANGENTS and len(tangents) > 0:
                             geom.write(struct.pack("<I", 1))
@@ -898,7 +1019,10 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         #NumVertices
                         geom.write(struct.pack("<I", len(verts)))
                         #NumPrimitives
-                        geom.write(struct.pack("<I", len(indices) // 3))
+                        if not is_curve:
+                            geom.write(struct.pack("<I", len(indices) // 3))
+                        else:
+                            geom.write(struct.pack("<I", len(indices) // 2))
                         #NumIndices
                         geom.write(struct.pack("<I", len(indices)))
                         #NumFaceNormals
@@ -1153,6 +1277,7 @@ def write_file(self, filepath, objects, depsgraph, scene,
 
 def _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS,
+           EXPORT_CURVES,
            EXPORT_TEXTURETXT,
            EXPORT_TANGENTS,
            EXPORT_BOUNDS,
@@ -1195,6 +1320,7 @@ def _write(self, context, filepath,
         # EXPORT THE FILE.
     write_file(self, full_path, objects, depsgraph, scene,
                EXPORT_APPLY_MODIFIERS,
+               EXPORT_CURVES,
                EXPORT_TEXTURETXT,
                EXPORT_TANGENTS,
                EXPORT_BOUNDS,
@@ -1218,6 +1344,7 @@ def save(self, context,
          *,
          use_selection=False,
          use_mesh_modifiers=True,
+         export_curves=False,
          use_texturetxt=True,
          export_tangents=True,
          export_bounds=True,
@@ -1235,6 +1362,7 @@ def save(self, context,
 
     _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS=use_mesh_modifiers,
+           EXPORT_CURVES=export_curves,
            EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_TANGENTS=export_tangents,
            EXPORT_BOUNDS=export_bounds,

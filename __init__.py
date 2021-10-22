@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 3, 4),
+    "version": (1, 3, 5),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -73,11 +73,16 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=False,
             )
 
-    # object group
     use_mesh_modifiers: BoolProperty(
             name="Apply Modifiers",
             description="Apply modifiers",
             default=True,
+            )
+    
+    export_curves: BoolProperty(
+            name="Export Curves",
+            description="Export curves as line primitives",
+            default=False,
             )
 
     use_texturetxt: BoolProperty(
@@ -236,6 +241,7 @@ class IM_PT_export_geometry(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, 'use_mesh_modifiers')
+        layout.prop(operator, 'export_curves')
         layout.prop(operator, 'global_scale')
         layout.prop(operator, 'path_mode')
         #layout.prop(operator, 'use_triangles')
