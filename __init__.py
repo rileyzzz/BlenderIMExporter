@@ -208,7 +208,7 @@ class IM_PT_export_include(bpy.types.Panel):
         col = layout.column(heading="Limit to", align = True)
         col.prop(operator, 'use_selection')
 
-        layout.separator()
+        #layout.separator()
 
         col = layout.column(heading = "Data", align = True)
 
