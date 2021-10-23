@@ -81,7 +81,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
     
     export_curves: BoolProperty(
             name="Export Curves",
-            description="Export curves as line primitives",
+            description="Export curves as line primitives (broken in TANE+)",
             default=False,
             )
 
