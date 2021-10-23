@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 3, 5),
+    "version": (1, 3, 6),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -86,25 +86,25 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             )
 
     use_texturetxt: BoolProperty(
-            name="Export texture.txt",
-            description="Write out a texture.txt for each used texture",
+            name="Create texture.txt",
+            description="Create a texture.txt metadata file for each used texture",
             default=True,
             )
 
     export_tangents: BoolProperty(
-            name="Export Tangents",
+            name="Tangents",
             description="Export tangent data",
             default=True,
             )
 
     export_bounds: BoolProperty(
-            name="Export Bounding Box",
+            name="Bounding Box",
             description="Export bounding box data",
             default=True,
             )
 
     export_neighbor_info: BoolProperty(
-            name="Export Adjacency Data",
+            name="Adjacency Data",
             description="Export triangle adjacency information (used by progressive meshes). Requires triangulated geometry. This can be slow",
             default=False,
             )
@@ -116,25 +116,25 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             )
 
     subsurf_ambient: BoolProperty(
-            name="Export Subsurface Color as Ambient",
+            name="Use Subsurface Color as Ambient",
             description="Export the Principled BSDF Subsurface Color as the material ambient",
             default=False,
             )
     
     mat_custom_properties: BoolProperty(
-            name="Custom Material Properties",
+            name="Material Properties",
             description="Exports the user-defined custom property data of materials",
             default=False,
             )
 
     use_kin: BoolProperty(
             name="Export Animation",
-            description="Write out the kin file",
+            description="Create a .kin animation file",
             default=True,
             )
 
     use_skel: BoolProperty(
-            name="Use Alternate SKEL Hierarchy",
+            name="Use SKEL Hierarchy",
             description="Use a SKEL hierarchy instead of INFL to store bone data. Will break skinning, but can reduce file size",
             default=False,
             )
@@ -205,18 +205,19 @@ class IM_PT_export_include(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        col = layout.column(heading="Limit to")
+        col = layout.column(heading="Limit to", align = True)
         col.prop(operator, 'use_selection')
 
         layout.separator()
-        layout.prop(operator, 'use_texturetxt')
-        layout.prop(operator, 'export_tangents')
-        layout.prop(operator, 'export_bounds')
-        layout.prop(operator, 'export_neighbor_info')
-        layout.prop(operator, 'use_wide_strings')
-        layout.prop(operator, 'subsurf_ambient')
-        layout.prop(operator, 'mat_custom_properties')
-        #layout.prop(operator, 'use_kin')
+
+        col = layout.column(heading = "Data", align = True)
+
+        #col.prop(operator, 'export_tangents')
+        col.prop(operator, 'export_bounds')
+        col.prop(operator, 'export_neighbor_info')
+        col.prop(operator, 'use_wide_strings')
+        col.prop(operator, 'subsurf_ambient')
+        col.prop(operator, 'mat_custom_properties')
 
 
 class IM_PT_export_geometry(bpy.types.Panel):
@@ -241,9 +242,11 @@ class IM_PT_export_geometry(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, 'use_mesh_modifiers')
+        layout.prop(operator, 'export_tangents')
         layout.prop(operator, 'export_curves')
         layout.prop(operator, 'global_scale')
         layout.prop(operator, 'path_mode')
+        layout.prop(operator, 'use_texturetxt')
         #layout.prop(operator, 'use_triangles')
 
 class IM_PT_export_animation(bpy.types.Panel):
