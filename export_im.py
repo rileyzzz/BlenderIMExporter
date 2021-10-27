@@ -173,12 +173,11 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX):
         end_chunk(chnk, bone)
 
 
-def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING):
+def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING):
     print("Writing .kin to " + filepath)
 
     scene = bpy.context.scene
-    NumFrames = scene.frame_end - scene.frame_start + 1
-
+    NumFrames = frame_end - frame_start + 1
 
     #preprocess
     root_bone = None
@@ -271,7 +270,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
 
             print("Found " + str(len(objbones_flat)) + " object bones")
             #FrameList
-            for i in range(NumFrames):
+            for i in range(frame_start, frame_end + 1):
                 scene.frame_set(i)
                 rf.write('FRAM'.encode('utf-8'))
                 with io.BytesIO() as fram:
@@ -462,6 +461,7 @@ def write_file(self, filepath, objects, scene,
                EXPORT_SKEL=False,
                EXPORT_ANIM_SCALE=False,
                EXPORT_ANIM_RELATIVE_POSITIONING=False,
+               EXPORT_ANIM_NLA=False,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
                EXPORT_PATH_MODE='AUTO',
@@ -818,8 +818,25 @@ def write_file(self, filepath, objects, scene,
                 root_bone = ob
 
     if EXPORT_KIN:
-        write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING)
-        #write_kin(os.path.dirname(filepath) + "\\anim.kin", bones, active_armature, EXPORT_GLOBAL_MATRIX)
+        if not EXPORT_ANIM_NLA:
+            scene = bpy.context.scene
+            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING)
+        else:
+            for track in active_armature.animation_data.nla_tracks:
+                if len(track.strips) == 0:
+                    continue
+
+                frame_start = track.strips[0].action_frame_start
+                frame_end = track.strips[0].action_frame_end
+
+                for strip in track.strips:
+                    frame_start = min(frame_start, strip.action_frame_start)
+                    frame_end = max(frame_end, strip.action_frame_end)
+                
+                track.is_solo = True
+                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING)
+                track.is_solo = False
+
         #reset frame after writing kin, for object transforms
         scene.frame_set(0)
 
@@ -1344,6 +1361,7 @@ def _write(self, context, filepath,
            EXPORT_SKEL,
            EXPORT_ANIM_SCALE,
            EXPORT_ANIM_RELATIVE_POSITIONING,
+           EXPORT_ANIM_NLA,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
            EXPORT_PATH_MODE,
@@ -1386,6 +1404,7 @@ def _write(self, context, filepath,
                EXPORT_SKEL,
                EXPORT_ANIM_SCALE,
                EXPORT_ANIM_RELATIVE_POSITIONING,
+               EXPORT_ANIM_NLA,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
                EXPORT_PATH_MODE,
@@ -1411,6 +1430,7 @@ def save(self, context,
          use_skel=False,
          export_anim_scale=False,
          use_relative_positioning=False,
+         use_nla=False,
          global_matrix=None,
          path_mode='AUTO'
          ):
@@ -1429,6 +1449,7 @@ def save(self, context,
            EXPORT_SKEL=use_skel,
            EXPORT_ANIM_SCALE=export_anim_scale,
            EXPORT_ANIM_RELATIVE_POSITIONING=use_relative_positioning,
+           EXPORT_ANIM_NLA=use_nla,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
            EXPORT_PATH_MODE=path_mode,

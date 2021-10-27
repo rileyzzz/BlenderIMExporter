@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 3, 8),
+    "version": (1, 3, 9),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -148,6 +148,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
     use_relative_positioning: BoolProperty(
             name="Use Relative Positioning",
             description="Use relative positioning in animation data. (Only supported in TANE+)",
+            default=False,
+            )
+
+    use_nla: BoolProperty(
+            name="Export Each NLA Track",
+            description="Export each NLA track to its own .kin file",
             default=False,
             )
 
@@ -280,6 +286,7 @@ class IM_PT_export_animation(bpy.types.Panel):
         layout.prop(operator, 'use_skel')
         layout.prop(operator, 'export_anim_scale')
         layout.prop(operator, 'use_relative_positioning')
+        layout.prop(operator, 'use_nla')
 
 def menu_func_export(self, context):
     self.layout.operator(ExportIM.bl_idname, text="Indexed Mesh (.im)")
