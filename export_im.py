@@ -37,6 +37,10 @@ def veckey3d(v):
 def power_of_two(n):
     return (n & (n-1) == 0) and n != 0
 
+def remove_scale_from_matrix(mat):
+    loc, rot, scale = mat.decompose()
+    return mathutils.Matrix.Translation(loc) @ rot.to_matrix().to_4x4()
+
 #def split_obj(split_objects, obj):
 #    print("Too many vertices on object " + obj.name + "! Splitting.")
 #    objcount = len(obj.vertices) % 65535
@@ -180,7 +184,7 @@ def write_kin(filepath, bones, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE
     root_bone = None
     for key in bones:
         bonegroup = bones[key]
-        bone = bonegroup[0]
+        bone = bonegroup["srcBone"]
         if bone.parent is None:
             root_bone = bone
             break
@@ -445,7 +449,7 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
 
 
 
-def write_file(self, filepath, objects, depsgraph, scene,
+def write_file(self, filepath, objects, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_CURVES=False,
                EXPORT_TEXTURETXT=True,
@@ -486,12 +490,28 @@ def write_file(self, filepath, objects, depsgraph, scene,
         if not EXPORT_CURVES and is_curve:
             continue
 
-        final = obj.evaluated_get(depsgraph) if EXPORT_APPLY_MODIFIERS else obj.original
+        if EXPORT_APPLY_MODIFIERS:
+            armature_modifiers = {}
+            if EXPORT_KIN:
+                # temporarily disable Armature modifiers if exporting skins
+                for idx, modifier in enumerate(obj.modifiers):
+                    if modifier.type == 'ARMATURE':
+                        armature_modifiers[idx] = modifier.show_viewport
+                        modifier.show_viewport = False
+            
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            final = obj.evaluated_get(depsgraph)
+            try:
+                me = final.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+            except RuntimeError:
+                me = None
 
-        try:
-            me = final.to_mesh()
-        except RuntimeError:
-            me = None
+            if EXPORT_KIN:
+                # restore Armature modifiers
+                for idx, show_viewport in armature_modifiers.items():
+                    obj.modifiers[idx].show_viewport = show_viewport
+        else:
+            me = obj.data
 
         if me is None:
             continue
@@ -749,7 +769,27 @@ def write_file(self, filepath, objects, depsgraph, scene,
         for bone in active_armature.data.bones:
             if "b.r." in bone.name:
                 #bone, chunk influences
-                bones[bone.name] = [bone, [[] for _ in range(len(meshes))]]
+
+                if bone.parent == None:
+                    boneMat = active_armature.matrix_world @ bone.matrix_local
+                else:
+                    #convert bone transforms into world space and remove the scale
+                    parentMatrix = active_armature.matrix_world @ bone.parent.matrix_local
+                    parentMatrix = remove_scale_from_matrix(parentMatrix)
+                    childMatrix = active_armature.matrix_world @ bone.matrix_local
+                    childMatrix = remove_scale_from_matrix(childMatrix)
+
+                    boneMat = parentMatrix.inverted() @ childMatrix
+
+                boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+
+                bone_data = {
+                    "srcBone": bone,
+                    "matrix": boneMat,
+                    "infl": [[] for _ in range(len(meshes))]
+                }
+
+                bones[bone.name] = bone_data
                 if bone.parent == None:
                     root_bone = bone
 
@@ -759,7 +799,21 @@ def write_file(self, filepath, objects, depsgraph, scene,
             print("Found bone object " + ob.name)
             #ob.scale = [1.0, 1.0, 1.0]
             #bpy.context.view_layer.update()
-            bones[ob.name] = [ob, [[] for _ in range(len(meshes))]]
+
+            if ob.parent == None:
+                boneMat = ob.matrix_world
+            else:
+                boneMat = ob.matrix_parent_inverse @ ob.matrix_world
+
+            boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+            
+            bone_data = {
+                "srcBone": ob,
+                "matrix": boneMat,
+                "infl": [[] for _ in range(len(meshes))]
+            }
+
+            bones[ob.name] = bone_data
             if ob.parent == None:
                 root_bone = ob
 
@@ -1073,8 +1127,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                             for name, weight in influences.items():
                                 if name in bones:
                                     bonegroup = bones[name]
-                                    bone = bonegroup[0]
-                                    chunkinfl = bonegroup[1][i]
+                                    bone = bonegroup["srcBone"]
+                                    chunkinfl = bonegroup["infl"][i]
 
 #                                    if BoneTransform == None:
 #                                        BoneTransform = bone.matrix_local * weight
@@ -1145,8 +1199,8 @@ def write_file(self, filepath, objects, depsgraph, scene,
                     #Bones
                     for key in bones:
                         bonegroup = bones[key]
-                        bone = bonegroup[0]
-                        chunkinfl = bonegroup[1] # per chunk influences
+                        bone = bonegroup["srcBone"]
+                        chunkinfl = bonegroup["infl"] # per chunk influences
 
                         #Name
                         jet_str(infl, bone.name)
@@ -1156,29 +1210,30 @@ def write_file(self, filepath, objects, depsgraph, scene,
                         else:
                             infl.write(struct.pack("<I", 0))
 
-                        if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
-                            print("BONE TYPE")
-                            if bone.parent == None:
-                                boneMat = bone.matrix_local
-                            else:
-                                boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-                            boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
-                        else:
-                            print("NOT BONE TYPE")
-                            #boneMat = bone.matrix_local
-                            #boneMat = mathutils.Matrix.Identity(4)
-                            if bone.parent == None:
-                                print("no parent")
-                                boneMat = bone.matrix_world
-                            else:
-                                print("bone " + bone.name + " parent " + bone.parent.name)
-                                boneMat = bone.matrix_parent_inverse @ bone.matrix_world
-                                #boneMat = bone.matrix_local
-                                #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
-                            boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
-
+                        # if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
+                        #     print("BONE TYPE")
+                        #     if bone.parent == None:
+                        #         boneMat = bone.matrix_local
+                        #     else:
+                        #         boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
+                        #     #boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
+                        #     boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+                        # else:
+                        #     print("NOT BONE TYPE")
+                        #     #boneMat = bone.matrix_local
+                        #     #boneMat = mathutils.Matrix.Identity(4)
+                        #     if bone.parent == None:
+                        #         print("no parent")
+                        #         boneMat = bone.matrix_world
+                        #     else:
+                        #         print("bone " + bone.name + " parent " + bone.parent.name)
+                        #         boneMat = bone.matrix_parent_inverse @ bone.matrix_world
+                        #         #boneMat = bone.matrix_local
+                        #         #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
+                        #     boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+                        
                         #boneMat = bone.matrix_local
-                        loc, rot, scale = boneMat.decompose()
+                        loc, rot, scale = bonegroup["matrix"].decompose()
 
                         #rot = mathutils.Quaternion()
 
@@ -1303,7 +1358,7 @@ def _write(self, context, filepath,
     scene = context.scene
     scene.frame_set(0)
 
-    depsgraph = context.evaluated_depsgraph_get()
+    #depsgraph = context.evaluated_depsgraph_get()
 
     # Exit edit mode
     if bpy.ops.object.mode_set.poll():
@@ -1318,7 +1373,7 @@ def _write(self, context, filepath,
     #orig_frame = scene.frame_current
     full_path = ''.join(context_name)
         # EXPORT THE FILE.
-    write_file(self, full_path, objects, depsgraph, scene,
+    write_file(self, full_path, objects, scene,
                EXPORT_APPLY_MODIFIERS,
                EXPORT_CURVES,
                EXPORT_TEXTURETXT,
