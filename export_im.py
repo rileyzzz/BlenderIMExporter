@@ -820,12 +820,14 @@ def write_file(self, filepath, objects, scene,
                     childMatrix = remove_scale_from_matrix(childMatrix)
 
                     boneMat = parentMatrix.inverted() @ childMatrix
-
+                
                 boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+                worldMat = EXPORT_GLOBAL_MATRIX @ remove_scale_from_matrix(active_armature.matrix_world @ bone.matrix_local)
 
                 bone_data = {
                     "srcBone": bone,
                     "matrix": boneMat,
+                    "worldMatrix": worldMat,
                     "infl": [[] for _ in range(len(meshes))]
                 }
 
@@ -846,10 +848,12 @@ def write_file(self, filepath, objects, scene,
                 boneMat = ob.matrix_parent_inverse @ ob.matrix_world
 
             boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
+            worldMat = EXPORT_GLOBAL_MATRIX @ ob.matrix_world
             
             bone_data = {
                 "srcBone": ob,
                 "matrix": boneMat,
+                "worldMatrix": worldMat,
                 "infl": [[] for _ in range(len(meshes))]
             }
 
@@ -1194,7 +1198,8 @@ def write_file(self, filepath, objects, scene,
 #                                    else:
 #                                        BoneTransform += bone.matrix_local * weight
 
-                                    boneMat = bone.matrix_local.inverted()
+                                    #boneMat = bone.matrix_local.inverted()
+                                    boneMat = bonegroup["worldMatrix"].inverted()
                                     chunkinfl.append([idx, weight, boneMat @ co_vector]) #boneMat @ co_vector
 
                             #if BoneTransform == None:
