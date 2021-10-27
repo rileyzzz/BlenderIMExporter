@@ -151,6 +151,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=False,
             )
 
+    export_all_bones: BoolProperty(
+            name="Export All Bones",
+            description="Exports all bones/animated nodes, regardless of b.r. prefix",
+            default=False,
+            )
+
     use_nla: BoolProperty(
             name="NLA Tracks",
             description="Export each NLA track to its own .kin file",
@@ -286,6 +292,7 @@ class IM_PT_export_animation(bpy.types.Panel):
         layout.prop(operator, 'use_skel')
         layout.prop(operator, 'export_anim_scale')
         layout.prop(operator, 'use_relative_positioning')
+        layout.prop(operator, 'export_all_bones')
         layout.prop(operator, 'use_nla')
 
 def menu_func_export(self, context):

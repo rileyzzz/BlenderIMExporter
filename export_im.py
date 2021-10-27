@@ -113,12 +113,12 @@ def end_chunk(f, chunk):
     f.write(struct.pack("<I", chunk.tell()))
     f.write(chunk.getbuffer())
 
-def recursive_writebone(chnk, srcBone, bones_flat):
+def recursive_writebone(chnk, srcBone, bones_flat, EXPORT_ALL_BONES):
     bones_flat.append(srcBone)
 
     relevant_children = []
     for child in srcBone.children:
-        if "b.r." in child.name:
+        if "b.r." in child.name or EXPORT_ALL_BONES:
             relevant_children.append(child)
 
     chnk.write('BONE'.encode('utf-8'))
@@ -130,14 +130,14 @@ def recursive_writebone(chnk, srcBone, bones_flat):
         bone.write(struct.pack("<I", len(relevant_children)))
         #BoneList
         for child in relevant_children:
-            recursive_writebone(bone, child, bones_flat)
+            recursive_writebone(bone, child, bones_flat, EXPORT_ALL_BONES)
         end_chunk(chnk, bone)
 
 #Recursive SKEL for embedded .im export
-def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX):
+def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ALL_BONES):
     relevant_children = []
     for child in srcBone.children:
-        if "b.r." in child.name:
+        if "b.r." in child.name or EXPORT_ALL_BONES:
             relevant_children.append(child)
 
     chnk.write('BONE'.encode('utf-8'))
@@ -169,11 +169,11 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX):
 
         #BoneList
         for child in relevant_children:
-            recursive_writebone_skel(bone, child, armature, EXPORT_GLOBAL_MATRIX)
+            recursive_writebone_skel(bone, child, armature, EXPORT_GLOBAL_MATRIX, EXPORT_ALL_BONES)
         end_chunk(chnk, bone)
 
 
-def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING):
+def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES):
     print("Writing .kin to " + filepath)
 
     scene = bpy.context.scene
@@ -253,7 +253,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_M
             with io.BytesIO() as skel:
                 chunk_ver(skel, 100)
                 #SkeletonBlock
-                recursive_writebone(skel, root_bone, bones_flat)
+                recursive_writebone(skel, root_bone, bones_flat, EXPORT_ALL_BONES)
                 #skel.write(struct.pack("<I", 0))
                 end_chunk(rf, skel)
 
@@ -323,6 +323,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_M
 
                         if EXPORT_ANIM_RELATIVE_POSITIONING and pose_bone.parent != None:
                             position = position * armatureScale
+                            #scale = scale * armatureScale
                         
                         if not EXPORT_ANIM_RELATIVE_POSITIONING:
                             rotation = rotation.inverted()
@@ -487,6 +488,7 @@ def write_file(self, filepath, objects, scene,
                EXPORT_SKEL=False,
                EXPORT_ANIM_SCALE=False,
                EXPORT_ANIM_RELATIVE_POSITIONING=False,
+               EXPORT_ALL_BONES=False,
                EXPORT_ANIM_NLA=False,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
@@ -793,7 +795,7 @@ def write_file(self, filepath, objects, scene,
         #EXPORT_KIN = False
     else:
         for bone in active_armature.data.bones:
-            if "b.r." in bone.name:
+            if "b.r." in bone.name or EXPORT_ALL_BONES:
                 #bone, chunk influences
 
                 if bone.parent == None:
@@ -846,7 +848,7 @@ def write_file(self, filepath, objects, scene,
     if EXPORT_KIN:
         if not EXPORT_ANIM_NLA:
             scene = bpy.context.scene
-            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING)
+            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
         else:
             for track in active_armature.animation_data.nla_tracks:
                 if len(track.strips) == 0:
@@ -860,7 +862,7 @@ def write_file(self, filepath, objects, scene,
                     frame_end = max(frame_end, strip.action_frame_end)
                 
                 track.is_solo = True
-                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING)
+                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
                 track.is_solo = False
 
         #reset frame after writing kin, for object transforms
@@ -1319,7 +1321,7 @@ def write_file(self, filepath, objects, scene,
                 with io.BytesIO() as skel:
                     chunk_ver(skel, 100)
                     if root_bone is not None:
-                        recursive_writebone_skel(skel, root_bone, active_armature, EXPORT_GLOBAL_MATRIX)
+                        recursive_writebone_skel(skel, root_bone, active_armature, EXPORT_GLOBAL_MATRIX, EXPORT_ALL_BONES)
                     end_chunk(rf, skel)
 
             #AttachmentInfo
@@ -1387,6 +1389,7 @@ def _write(self, context, filepath,
            EXPORT_SKEL,
            EXPORT_ANIM_SCALE,
            EXPORT_ANIM_RELATIVE_POSITIONING,
+           EXPORT_ALL_BONES,
            EXPORT_ANIM_NLA,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
@@ -1430,6 +1433,7 @@ def _write(self, context, filepath,
                EXPORT_SKEL,
                EXPORT_ANIM_SCALE,
                EXPORT_ANIM_RELATIVE_POSITIONING,
+               EXPORT_ALL_BONES,
                EXPORT_ANIM_NLA,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
@@ -1456,6 +1460,7 @@ def save(self, context,
          use_skel=False,
          export_anim_scale=False,
          use_relative_positioning=False,
+         export_all_bones=False,
          use_nla=False,
          global_matrix=None,
          path_mode='AUTO'
@@ -1475,6 +1480,7 @@ def save(self, context,
            EXPORT_SKEL=use_skel,
            EXPORT_ANIM_SCALE=export_anim_scale,
            EXPORT_ANIM_RELATIVE_POSITIONING=use_relative_positioning,
+           EXPORT_ALL_BONES=export_all_bones,
            EXPORT_ANIM_NLA=use_nla,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
