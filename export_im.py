@@ -179,11 +179,19 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_M
     scene = bpy.context.scene
     NumFrames = frame_end - frame_start + 1
 
-    #preprocess
+    
+    armatureMat = mathutils.Matrix.Identity(4)
+
+    if armature != None:
+        armatureMat = armature.matrix_world
+
+    _, _, armatureScale = armatureMat.decompose()
+
     root_bone = None
     for key in bones:
         bonegroup = bones[key]
         bone = bonegroup["srcBone"]
+
         if bone.parent is None:
             root_bone = bone
             break
@@ -286,18 +294,36 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_M
                     #BoneDataList
                     for pose_bone in posebones_flat:
                         #mat = pose_bone.matrix_basis
-                        if armature != None:
-                            mat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world
-                        else:
-                            mat = EXPORT_GLOBAL_MATRIX
                         
-                        if not EXPORT_ANIM_RELATIVE_POSITIONING or pose_bone.parent is None:
-                            mat = mat @ pose_bone.matrix
-                        else:
-                            mat = mat @ pose_bone.parent.matrix.inverted() @ pose_bone.matrix
+                        # if not EXPORT_ANIM_RELATIVE_POSITIONING or pose_bone.parent is None:
+                        #     mat = mat @ pose_bone.matrix
+                        # else:
+                        #     mat = mat @ pose_bone.parent.matrix.inverted() @ pose_bone.matrix
                         
+                        if not EXPORT_ANIM_RELATIVE_POSITIONING:
+                            mat = armatureMat @ pose_bone.matrix
+                        else:
+                            if pose_bone.parent == None:
+                                mat = armatureMat @ pose_bone.matrix
+                            else:
+                                #convert bone transforms into world space and remove the scale if necessary
+                                parentMatrix = pose_bone.parent.matrix
+                                childMatrix = pose_bone.matrix
+
+                                # if not EXPORT_ANIM_SCALE:
+                                #     parentMatrix = remove_scale_from_matrix(parentMatrix)
+                                #     childMatrix = remove_scale_from_matrix(childMatrix)
+                                
+                                mat = parentMatrix.inverted() @ childMatrix
+
+                        
+                        mat = EXPORT_GLOBAL_MATRIX @ mat
+
                         position, rotation, scale = mat.decompose()
 
+                        if EXPORT_ANIM_RELATIVE_POSITIONING and pose_bone.parent != None:
+                            position = position * armatureScale
+                        
                         if not EXPORT_ANIM_RELATIVE_POSITIONING:
                             rotation = rotation.inverted()
                         
