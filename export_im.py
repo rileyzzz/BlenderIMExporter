@@ -502,7 +502,7 @@ def write_file(self, filepath, objects, scene,
             depsgraph = bpy.context.evaluated_depsgraph_get()
             final = obj.evaluated_get(depsgraph)
             try:
-                me = final.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+                me = final.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph).copy()
             except RuntimeError:
                 me = None
 
