@@ -152,7 +152,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             )
 
     use_nla: BoolProperty(
-            name="Export Each NLA Track",
+            name="NLA Tracks",
             description="Export each NLA track to its own .kin file",
             default=False,
             )
