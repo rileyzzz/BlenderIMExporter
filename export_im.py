@@ -507,6 +507,9 @@ def write_file(self, filepath, objects, scene,
     bounds_min = mathutils.Vector((0.0, 0.0, 0.0))
     bounds_max = mathutils.Vector((0.0, 0.0, 0.0))
 
+    max_vert_influences = 0
+    max_chunk_influences = 0
+
     material_groups = {}
     curves = []
 
@@ -638,6 +641,7 @@ def write_file(self, filepath, objects, scene,
         tangents = []
 
         area = 0.0
+        influence_count = 0
         
         for obj_data in group:
             me = obj_data["me"]
@@ -705,6 +709,9 @@ def write_file(self, filepath, objects, scene,
                             if weight != 0.0:
                                 influences[group.name] = weight
 
+                        max_vert_influences = max(max_vert_influences, len(influences))
+                        influence_count += len(influences)
+
                         unique_verts.append([vert.co[:], uv[:], influences])
                         normals.append(no.normalized())
 
@@ -757,10 +764,15 @@ def write_file(self, filepath, objects, scene,
                     area = 0.0
                     uv_dict.clear()
                     uv = uv_key = uv_val = None
+
+                    max_chunk_influences = max(max_chunk_influences, influence_count)
+                    influence_count = 0
                     print("Block split.")
 
         #Add remaining verts
         if len(unique_verts) > 0:
+            max_chunk_influences = max(max_chunk_influences, influence_count)
+
             mesh_data = {
                 "obj": obj,
                 "material": material,
@@ -918,9 +930,9 @@ def write_file(self, filepath, objects, scene,
                 #NumAttributes
                 info.write(struct.pack("<I", len(meshes)))
                 #MaxInfluencePerVertex
-                info.write(struct.pack("<I", 0))
+                info.write(struct.pack("<I", max_vert_influences))
                 #MaxInfluencePerChunk
-                info.write(struct.pack("<I", 0))
+                info.write(struct.pack("<I", max_chunk_influences))
 
                 #Bounding Box
                 if EXPORT_BOUNDS:
@@ -1052,7 +1064,9 @@ def write_file(self, filepath, objects, scene,
                             filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
                                                        EXPORT_PATH_MODE, "", copy_set, image.library)
                             strength = 1.0
-                            if entry == "normalmap_texture":
+
+                            #don't modify strength for tbumptex shinestrength
+                            if entry == "normalmap_texture" and type == 8:
                                 strength = 0.2 * mat_wrap.normalmap_strength
                             if EXPORT_TEXTURETXT:
                                 texturepath = texture_file(type, filepath, dest_dir, is_npo2)
