@@ -641,7 +641,7 @@ def write_file(self, filepath, objects, scene,
         tangents = []
 
         area = 0.0
-        influence_count = 0
+        influence_bones = []
         
         for obj_data in group:
             me = obj_data["me"]
@@ -708,9 +708,10 @@ def write_file(self, filepath, objects, scene,
                                 weight = 0.0
                             if weight != 0.0:
                                 influences[group.name] = weight
+                                if group.name not in influence_bones:
+                                    influence_bones.append(group.name)
 
                         max_vert_influences = max(max_vert_influences, len(influences))
-                        influence_count += len(influences)
 
                         unique_verts.append([vert.co[:], uv[:], influences])
                         normals.append(no.normalized())
@@ -765,13 +766,14 @@ def write_file(self, filepath, objects, scene,
                     uv_dict.clear()
                     uv = uv_key = uv_val = None
 
-                    max_chunk_influences = max(max_chunk_influences, influence_count)
-                    influence_count = 0
+                    max_chunk_influences = max(max_chunk_influences, len(influence_bones))
+                    influence_bones.clear()
+
                     print("Block split.")
 
         #Add remaining verts
         if len(unique_verts) > 0:
-            max_chunk_influences = max(max_chunk_influences, influence_count)
+            max_chunk_influences = max(max_chunk_influences, len(influence_bones))
 
             mesh_data = {
                 "obj": obj,
