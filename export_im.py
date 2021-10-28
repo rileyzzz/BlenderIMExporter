@@ -125,7 +125,11 @@ def recursive_writebone(chnk, srcBone, bones_flat, EXPORT_ALL_BONES):
     with io.BytesIO() as bone:
         chunk_ver(bone, 100)
         #BoneName
-        jet_str(bone, srcBone.name)
+        bone_name = srcBone.name
+        if not bone_name.startswith("b.r."):
+            bone_name = "b.r." + bone_name
+        jet_str(bone, bone_name)
+
         #NumChildren
         bone.write(struct.pack("<I", len(relevant_children)))
         #BoneList
@@ -144,7 +148,10 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX, EXPO
     with io.BytesIO() as bone:
         chunk_ver(bone, 100)
         #BoneName
-        jet_str(bone, srcBone.name)
+        bone_name = srcBone.name
+        if not bone_name.startswith("b.r."):
+            bone_name = "b.r." + bone_name
+        jet_str(bone, bone_name)
 
         if srcBone.parent == None:
             boneMat = srcBone.matrix_local
@@ -1275,10 +1282,17 @@ def write_file(self, filepath, objects, scene,
                         chunkinfl = bonegroup["infl"] # per chunk influences
 
                         #Name
-                        jet_str(infl, bone.name)
+                        bone_name = bone.name
+                        if not bone_name.startswith("b.r."):
+                            bone_name = "b.r." + bone_name
+                        jet_str(infl, bone_name)
+
                         #Parent
                         if bone.parent != None:
-                            jet_str(infl, bone.parent.name)
+                            parent_name = bone.parent.name
+                            if not parent_name.startswith("b.r."):
+                                parent_name = "b.r." + parent_name
+                            jet_str(infl, parent_name)
                         else:
                             infl.write(struct.pack("<I", 0))
 
