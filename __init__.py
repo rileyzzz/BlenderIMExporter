@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 4, 3),
+    "version": (1, 4, 4),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -138,7 +138,13 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             description="Create a .kin animation file",
             default=True,
             )
-
+            
+    use_blender_framerate: BoolProperty(
+            name="Use Blender Frame Rate",
+            description="Use the configured blender framerate instead of the default (30 fps). May cause issues with bogey exports",
+            default=False,
+            )
+    
     use_skel: BoolProperty(
             name="Use SKEL Hierarchy",
             description="Use a SKEL hierarchy instead of INFL to store bone data. Will break skinning, but can reduce file size",
@@ -300,6 +306,7 @@ class IM_PT_export_animation(bpy.types.Panel):
         layout.prop(operator, 'use_relative_positioning')
         layout.prop(operator, 'export_all_bones')
         layout.prop(operator, 'use_nla')
+        layout.prop(operator, 'use_blender_framerate')
 
 def menu_func_export(self, context):
     self.layout.operator(ExportIM.bl_idname, text="Indexed Mesh (.im)")

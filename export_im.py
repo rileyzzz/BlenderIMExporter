@@ -180,7 +180,7 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX, EXPO
         end_chunk(chnk, bone)
 
 
-def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES):
+def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES):
     print("Writing .kin to " + filepath)
 
     scene = bpy.context.scene
@@ -228,7 +228,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, EXPORT_GLOBAL_M
                 #NumFrames
                 info.write(struct.pack("<I", NumFrames))
                 #FrameRate
-                info.write(struct.pack("<I", 30))
+                info.write(struct.pack("<I", framerate))
                 #MetricScale
                 info.write(struct.pack("<f", 1.0))
 
@@ -501,6 +501,7 @@ def write_file(self, filepath, objects, scene,
                EXPORT_SUBSURF_AMBIENT=False,
                EXPORT_CUSTOM_PROPERTIES=False,
                EXPORT_KIN=True,
+               EXPORT_BLENDER_FRAMERATE=False,
                EXPORT_SKEL=False,
                EXPORT_ANIM_SCALE=False,
                EXPORT_ANIM_RELATIVE_POSITIONING=False,
@@ -883,9 +884,14 @@ def write_file(self, filepath, objects, scene,
                 root_bone = ob
 
     if EXPORT_KIN:
+        anim_framerate = 30
+        scene = bpy.context.scene
+
+        if EXPORT_BLENDER_FRAMERATE:
+            anim_framerate = int(scene.render.fps / scene.render.fps_base)
+        
         if not EXPORT_ANIM_NLA:
-            scene = bpy.context.scene
-            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
+            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, anim_framerate, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
         else:
             for track in active_armature.animation_data.nla_tracks:
                 if len(track.strips) == 0:
@@ -899,7 +905,7 @@ def write_file(self, filepath, objects, scene,
                     frame_end = max(frame_end, strip.action_frame_end)
                 
                 track.is_solo = True
-                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
+                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), anim_framerate, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
                 track.is_solo = False
 
         #reset frame after writing kin, for object transforms
@@ -1437,6 +1443,7 @@ def _write(self, context, filepath,
            EXPORT_SUBSURF_AMBIENT,
            EXPORT_CUSTOM_PROPERTIES,
            EXPORT_KIN,
+           EXPORT_BLENDER_FRAMERATE,
            EXPORT_SKEL,
            EXPORT_ANIM_SCALE,
            EXPORT_ANIM_RELATIVE_POSITIONING,
@@ -1481,6 +1488,7 @@ def _write(self, context, filepath,
                EXPORT_SUBSURF_AMBIENT,
                EXPORT_CUSTOM_PROPERTIES,
                EXPORT_KIN,
+               EXPORT_BLENDER_FRAMERATE,
                EXPORT_SKEL,
                EXPORT_ANIM_SCALE,
                EXPORT_ANIM_RELATIVE_POSITIONING,
@@ -1508,6 +1516,7 @@ def save(self, context,
          subsurf_ambient=False,
          mat_custom_properties=False,
          use_kin=True,
+         use_blender_framerate=False,
          use_skel=False,
          export_anim_scale=False,
          use_relative_positioning=False,
@@ -1528,6 +1537,7 @@ def save(self, context,
            EXPORT_SUBSURF_AMBIENT=subsurf_ambient,
            EXPORT_CUSTOM_PROPERTIES=mat_custom_properties,
            EXPORT_KIN=use_kin,
+           EXPORT_BLENDER_FRAMERATE=use_blender_framerate,
            EXPORT_SKEL=use_skel,
            EXPORT_ANIM_SCALE=export_anim_scale,
            EXPORT_ANIM_RELATIVE_POSITIONING=use_relative_positioning,
