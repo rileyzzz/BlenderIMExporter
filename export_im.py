@@ -394,6 +394,8 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
     indices = []
     normals = []
 
+    influence_bones = []
+
     for i, edge in enumerate(me.edges):
         for v in edge.vertices:
             vert = me.vertices[v]
@@ -416,6 +418,8 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
                         weight = 0.0
                     if weight != 0.0:
                         influences[group.name] = weight
+                        if group.name not in influence_bones:
+                            influence_bones.append(group.name)
 
                 unique_verts.append([vert.co[:], uv[:], influences])
                 normals.append(no.normalized())
@@ -449,7 +453,8 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
                 "area": 0.0,
                 "uv_layer": uv_layer,
                 "parent": objectParent,
-                "is_curve": True
+                "is_curve": True,
+                "max_influence": len(influence_bones)
             }
 
             meshes.append(mesh_data)
@@ -460,6 +465,9 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
 
             uv_dict.clear()
             uv = uv_key = uv_val = None
+
+            influence_bones.clear()
+            
             print("Block split.")
 
     if len(unique_verts) > 0:
@@ -475,7 +483,8 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
             "area": 0.0,
             "uv_layer": uv_layer,
             "parent": objectParent,
-            "is_curve": True
+            "is_curve": True,
+            "max_influence": len(influence_bones)
         }
 
         meshes.append(mesh_data)
