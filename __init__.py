@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 4, 1),
+    "version": (1, 4, 2),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -90,6 +90,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             description="Create a texture.txt metadata file for each used texture",
             default=True,
             )
+
+    # legacy_chunk_data: BoolProperty(
+    #         name="Legacy Chunk Data",
+    #         description="Uses legacy geometry data for exports where compatibility with ancient games is a must. Disables tangent export",
+    #         default=False,
+    #         )
 
     export_tangents: BoolProperty(
             name="Tangents",

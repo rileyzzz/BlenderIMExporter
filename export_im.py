@@ -751,7 +751,8 @@ def write_file(self, filepath, objects, scene,
                         "area": area,
                         "uv_layer": uv_layer,
                         "parent": objectParent,
-                        "is_curve": False
+                        "is_curve": False,
+                        "max_influence": len(influence_bones)
                     }
 
                     meshes.append(mesh_data)
@@ -773,8 +774,6 @@ def write_file(self, filepath, objects, scene,
 
         #Add remaining verts
         if len(unique_verts) > 0:
-            max_chunk_influences = max(max_chunk_influences, len(influence_bones))
-
             mesh_data = {
                 "obj": obj,
                 "material": material,
@@ -787,9 +786,13 @@ def write_file(self, filepath, objects, scene,
                 "area": area,
                 "uv_layer": uv_layer,
                 "parent": objectParent,
-                "is_curve": False
+                "is_curve": False,
+                "max_influence": len(influence_bones)
             }
             meshes.append(mesh_data)
+
+            max_chunk_influences = max(max_chunk_influences, len(influence_bones))
+            
 
         print("Complete.")
 
@@ -962,6 +965,7 @@ def write_file(self, filepath, objects, scene,
                 uv_layer        = entry["uv_layer"]
                 objParent       = entry["parent"]
                 is_curve        = entry["is_curve"]
+                max_influence   = entry["max_influence"]
 
 
                 defaultMaterial = bpy.data.materials.new(obj.name + ".m.notex")
@@ -1146,8 +1150,10 @@ def write_file(self, filepath, objects, scene,
                         geom.write(struct.pack("<I", len(indices)))
                         #NumFaceNormals
                         geom.write(struct.pack("<I", len(face_normals)))
-                        #MaxInfluence
-                        geom.write(struct.pack("<I", 0)) #FIX FOR ANIMATION
+
+                        #Required for games pre-TANE, otherwise mesh refuses to animate
+                        #MaxInfluence (102)
+                        geom.write(struct.pack("<I", max_influence))
 
                         #Parent (201)
                         if objParent != None:
@@ -1317,6 +1323,7 @@ def write_file(self, filepath, objects, scene,
 
                         necessary_infl = []
                         for influencelist in chunkinfl:
+                            #having this breaks stuff
                             #if len(influencelist) > 0:
                             necessary_infl.append(influencelist)
 
