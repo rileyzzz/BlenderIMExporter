@@ -216,7 +216,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPO
             rf.write('INFO'.encode('utf-8'))
             with io.BytesIO() as info:
                 version_needed = 100
-                if EXPORT_ANIM_SCALE:
+                if EXPORT_ANIM_SCALE or EXPORT_ANIM_RELATIVE_POSITIONING:
                     version_needed = 102
                 # if EXPORT_ANIM_RELATIVE_POSITIONING:
                 #     version_needed = 257
@@ -311,7 +311,8 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPO
                             mat = armatureMat @ pose_bone.matrix
                         else:
                             if pose_bone.parent == None:
-                                mat = armatureMat @ pose_bone.matrix
+                                #mat = armatureMat @ pose_bone.matrix
+                                mat = pose_bone.matrix
                             else:
                                 #convert bone transforms into world space and remove the scale if necessary
                                 parentMatrix = pose_bone.parent.matrix
@@ -328,7 +329,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPO
 
                         position, rotation, scale = mat.decompose()
 
-                        if EXPORT_ANIM_RELATIVE_POSITIONING and pose_bone.parent != None:
+                        if EXPORT_ANIM_RELATIVE_POSITIONING: # and pose_bone.parent != None
                             position = position * armatureScale
                             #scale = scale * armatureScale
                         
