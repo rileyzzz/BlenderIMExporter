@@ -275,7 +275,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPO
 
             objbones_flat = []
             for obj in bones_flat:
-                if hasattr(obj, 'type') and (obj.type == 'EMPTY' or obj.type == 'LATTICE'):
+                if hasattr(obj, 'type') and (obj.type == 'EMPTY' or obj.type == 'LATTICE' or obj.type == 'MESH'):
                     objbones_flat.append(obj)
 
                 #pose_bone = (b for b in armature.pose.bones if b.bone is bone)
@@ -570,7 +570,10 @@ def write_file(self, filepath, objects, scene,
         #uv_layer = me.uv_layers.active.data
         #mesh_triangulate(me)
         objectParent = None #empty and lattice parents
-        if obj.parent != None:
+        #meshes can be nodes themselves
+        if "b.r." in obj.name:
+            objectParent = obj
+        elif obj.parent != None:
             if "b.r." in obj.parent.name:
                 objectParent = obj.parent
         
