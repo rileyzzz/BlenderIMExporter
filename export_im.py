@@ -311,8 +311,10 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPO
                             mat = armatureMat @ pose_bone.matrix
                         else:
                             if pose_bone.parent == None:
-                                #mat = armatureMat @ pose_bone.matrix
-                                mat = pose_bone.matrix
+                                # limitation here where the root node will ignore scaling data
+                                # we can't remove the scaling from the armature matrix alone as that will break the world space conversion of the root node's matrix
+                                mat = remove_scale_from_matrix(armatureMat @ pose_bone.matrix)
+                                #mat = pose_bone.matrix
                             else:
                                 #convert bone transforms into world space and remove the scale if necessary
                                 parentMatrix = pose_bone.parent.matrix
