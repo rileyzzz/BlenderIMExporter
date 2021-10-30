@@ -273,6 +273,31 @@ class IM_PT_export_geometry(bpy.types.Panel):
         layout.prop(operator, 'use_texturetxt')
         #layout.prop(operator, 'use_triangles')
 
+class IM_PT_export_armature(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "Armature"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "EXPORT_SCENE_OT_im"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, 'use_skel')
+        layout.prop(operator, 'export_all_bones')
+
+
 class IM_PT_export_animation(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
@@ -301,10 +326,9 @@ class IM_PT_export_animation(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.enabled = operator.use_kin
-        layout.prop(operator, 'use_skel')
+        
         layout.prop(operator, 'export_anim_scale')
         layout.prop(operator, 'use_relative_positioning')
-        layout.prop(operator, 'export_all_bones')
         layout.prop(operator, 'use_nla')
         layout.prop(operator, 'use_blender_framerate')
 
@@ -316,6 +340,7 @@ classes = (
     ExportIM,
     IM_PT_export_include,
     IM_PT_export_geometry,
+    IM_PT_export_armature,
     IM_PT_export_animation
 )
 
