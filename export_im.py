@@ -72,18 +72,14 @@ def jet_str(f, str, wide=False):
     global GLOBAL_WIDE_STRINGS
     wide = wide or GLOBAL_WIDE_STRINGS
     
+    encoded_name = bytearray(str.encode('utf-16le' if wide else 'utf-8'))
+
     #wacky Jet byte alignment
-    str_length = len(str)
-    if(wide):
-        str_length *= 2
-    
+    str_length = len(encoded_name)
+
     numTerminators = 4 - str_length % 4 if str_length % 4 != 0 else 0
-    encoded_name = (str + ('\0' * numTerminators)).encode('utf-16' if wide else 'utf-8')
-    
-    #remove the byte order mark
-    if wide:
-        encoded_name = encoded_name[2:]
-    
+    encoded_name += bytes('\0' * numTerminators, 'utf-8')
+
     len_bytes = bytearray(struct.pack("<I", len(encoded_name)))
     if(wide):
         len_bytes[3] = 0x40
@@ -103,7 +99,7 @@ def texture_file(type, img_path, target_dir, is_npo2):
         if is_npo2:
             f.write("nonpoweroftwo=1\n")
         if type == 8:
-            f.write("NormalMapHint=normalmap")
+            f.write("NormalMapHint=normalmap\n")
     return texturepath
 
 def chunk_ver(f, ver):
