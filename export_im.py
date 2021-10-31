@@ -1402,9 +1402,10 @@ def write_file(self, filepath, objects, scene,
                             att_parent_name = att.parent_bone
                         
                         #attachment parent bones
-                        if(not "/" in att_name):
-                            att_name = "a." + att_parent_name[2:] + "/" + att_name
-                        
+                        if att.parent is not None:
+                            if(not "/" in att_name):
+                                att_name = "a." + att_parent_name[2:] + "/" + att_name
+                            
                         #Name
                         jet_str(atch, att_name)
 
