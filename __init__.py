@@ -111,7 +111,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
 
     export_neighbor_info: BoolProperty(
             name="Adjacency Data",
-            description="Export triangle adjacency information (used by progressive meshes). Requires triangulated geometry. This can be slow",
+            description="Export triangle adjacency information. Requires triangulated geometry. This can be slow",
             default=False,
             )
 
