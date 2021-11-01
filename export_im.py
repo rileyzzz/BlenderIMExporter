@@ -863,9 +863,7 @@ def write_file(self, filepath, objects, scene,
     for ob in objects:
         if "b.r." in ob.name:
             print("Found bone object " + ob.name)
-            #ob.scale = [1.0, 1.0, 1.0]
-            #bpy.context.view_layer.update()
-
+            
             if ob.parent == None:
                 boneMat = ob.matrix_world
             else:
@@ -954,11 +952,11 @@ def write_file(self, filepath, objects, scene,
                 else:
                     chunk_ver(info, 102)
 
-                objLocation, objRotation, objScale = EXPORT_GLOBAL_MATRIX.decompose();
+                objLocation, objRotation, objScale = EXPORT_GLOBAL_MATRIX.decompose()
+
                 #Position
                 info.write(struct.pack("<fff", objLocation.x, objLocation.y, objLocation.z))
                 #Rotation
-                #info.write(struct.pack("<ffff", objRotation.x, objRotation.y, objRotation.z, objRotation.w))
                 info.write(struct.pack("<ffff", objRotation.w, objRotation.x, objRotation.y, objRotation.z))
                 #NumAttributes
                 info.write(struct.pack("<I", len(meshes)))
@@ -1037,7 +1035,7 @@ def write_file(self, filepath, objects, scene,
 
                         #TwoSided
                         matl.write(struct.pack("<I", int(not mat.use_backface_culling)))
-                        #matl.write(struct.pack("<I", 0))
+
                         #Opacity
                         matl.write(struct.pack("<f", mat_wrap.alpha))
                         #Ambient
@@ -1125,28 +1123,6 @@ def write_file(self, filepath, objects, scene,
                     attr.write('GEOM'.encode('utf-8'))
                     with io.BytesIO() as geom:
                         chunk_ver(geom, 201)
-                        #bm = bmesh.new()
-                        #bm.from_mesh(mesh)
-                        #bm = mesh
-
-
-#                        verts = []
-#                        indices = block_indices #[]
-#                        normals = []
-#                        facenormals = [] #[]
-##                        for i, vert in enumerate(bm.verts):
-##                            verts.append([vert.co, uv_layer[i].uv]) #vert.index
-##                            normals.append(vert.normal)
-##
-##                        for face in bm.faces:
-##                            for vert in face.verts:
-##                                indices.append(vert.index)
-##                            facenormals.append(face.normal)
-#                        for vert in block_verts:
-#                            verts.append([vert.co, uv_layer[vert.index].uv])
-#                            normals.append(vert.normal)
-#                        for face in block_faces:
-#                            facenormals.append(face.normal)
 
                         #Flags
                         if not is_curve:
@@ -1161,7 +1137,6 @@ def write_file(self, filepath, objects, scene,
                             geom.write(struct.pack("<I", 0))
 
                         #Area
-                        #area = sum(face.calc_area() for face in bm.faces)
                         geom.write(struct.pack("<f", area))
                         #NumVertices
                         geom.write(struct.pack("<I", len(verts)))
@@ -1225,25 +1200,9 @@ def write_file(self, filepath, objects, scene,
                                     bone = bonegroup["srcBone"]
                                     chunkinfl = bonegroup["infl"][i]
 
-#                                    if BoneTransform == None:
-#                                        BoneTransform = bone.matrix_local * weight
-#                                    else:
-#                                        BoneTransform += bone.matrix_local * weight
-
                                     #boneMat = bone.matrix_local.inverted()
                                     boneMat = bonegroup["worldMatrix"].inverted()
                                     chunkinfl.append([idx, weight, boneMat @ co_vector]) #boneMat @ co_vector
-
-                            #if BoneTransform == None:
-                                #BoneTransform = mathutils.Matrix.Identity()
-
-                            #BoneTransform = EXPORT_GLOBAL_MATRIX @ obj.matrix_world @ BoneTransform
-
-                            #inverse_vector = BoneTransform.inverted() @ co_vector
-                            #inverse_vector = co_vector @ BoneTransform.inverted()
-
-                            #geom.write(struct.pack("<fff", inverse_vector[0], inverse_vector[1], inverse_vector[2]))
-                            #geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
 
                         #Indices
                         for idx in indices:
@@ -1313,28 +1272,7 @@ def write_file(self, filepath, objects, scene,
                         else:
                             infl.write(struct.pack("<I", 0))
 
-                        # if not hasattr(bone, 'type'): #bone.type != 'EMPTY'
-                        #     print("BONE TYPE")
-                        #     if bone.parent == None:
-                        #         boneMat = bone.matrix_local
-                        #     else:
-                        #         boneMat = bone.parent.matrix_local.inverted() @ bone.matrix_local
-                        #     #boneMat = EXPORT_GLOBAL_MATRIX @ active_armature.matrix_world @ boneMat
-                        #     boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
-                        # else:
-                        #     print("NOT BONE TYPE")
-                        #     #boneMat = bone.matrix_local
-                        #     #boneMat = mathutils.Matrix.Identity(4)
-                        #     if bone.parent == None:
-                        #         print("no parent")
-                        #         boneMat = bone.matrix_world
-                        #     else:
-                        #         print("bone " + bone.name + " parent " + bone.parent.name)
-                        #         boneMat = bone.matrix_parent_inverse @ bone.matrix_world
-                        #         #boneMat = bone.matrix_local
-                        #         #boneMat = bone.parent.matrix_world.copy() @ bone.matrix_local
-                        #     boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
-                        
+
                         #boneMat = bone.matrix_local
                         loc, rot, scale = bonegroup["matrix"].decompose()
 
