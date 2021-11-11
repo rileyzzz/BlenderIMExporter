@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 4, 6),
+    "version": (1, 4, 7),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -173,6 +173,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             name="NLA Tracks",
             description="Export each NLA track to its own .kin file",
             default=False,
+            )
+    
+    export_events: BoolProperty(
+            name="Animation Events",
+            description="Exports timeline markers as animation events. Add the prefix 's.' (removed on export) for sound events, generic events will be created otherwise",
+            default=True,
             )
 
     global_scale: FloatProperty(
@@ -330,6 +336,7 @@ class IM_PT_export_animation(bpy.types.Panel):
         layout.prop(operator, 'export_anim_scale')
         layout.prop(operator, 'use_relative_positioning')
         layout.prop(operator, 'use_nla')
+        layout.prop(operator, 'export_events')
         layout.prop(operator, 'use_blender_framerate')
 
 def menu_func_export(self, context):

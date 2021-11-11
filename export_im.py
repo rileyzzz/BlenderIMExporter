@@ -176,7 +176,7 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX, EXPO
         end_chunk(chnk, bone)
 
 
-def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES):
+def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, events, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES):
     print("Writing .kin to " + filepath)
 
     scene = bpy.context.scene
@@ -241,12 +241,28 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, EXPO
 
                 end_chunk(rf, info)
 
+            # AFAIK, supported event types are AET_SOUND_EVENT (0), and AET_GENERIC_EVENT (4)
+            # sound events will play the entry of the same name within the soundscript container in the config - best example of this is the PB interior coalman (<kuid:-25:696>)
+            # generic events are probably used by script
+
             #Events
             rf.write('EVNT'.encode('utf-8'))
             with io.BytesIO() as evnt:
                 chunk_ver(evnt, 100)
                 #NumEvents
-                evnt.write(struct.pack("<I", 0))
+                #evnt.write(struct.pack("<I", 0))
+                evnt.write(struct.pack("<I", len(events)))
+
+                for evt in events:
+                    typeid = 4 #AET_GENERIC_EVENT
+                    if(evt["type"] == "sound"):
+                        typeid = 0
+                    
+                    evnt.write(struct.pack("<I", evt["frame"]))
+                    evnt.write(struct.pack("<I", typeid))
+                    jet_str(evnt, evt["name"])
+                    
+
                 end_chunk(rf, evnt)
 
             bones_flat = []
@@ -506,6 +522,7 @@ def write_file(self, filepath, objects, scene,
                EXPORT_ANIM_RELATIVE_POSITIONING=False,
                EXPORT_ALL_BONES=False,
                EXPORT_ANIM_NLA=False,
+               EXPORT_ANIM_EVENTS=True,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
                EXPORT_PATH_MODE='AUTO',
@@ -887,11 +904,27 @@ def write_file(self, filepath, objects, scene,
         anim_framerate = 30
         scene = bpy.context.scene
 
+        events = []
+        if EXPORT_ANIM_EVENTS:
+            for evt in scene.timeline_markers:
+                name = evt.name
+                type = "generic"
+                if name.startswith("s."):
+                    name = name[2:]
+                    type = "sound"
+                
+                data = {
+                    "frame": evt.frame,
+                    "type": type,
+                    "name": name
+                }
+                events.append(data)
+
         if EXPORT_BLENDER_FRAMERATE:
             anim_framerate = int(scene.render.fps / scene.render.fps_base)
         
         if not EXPORT_ANIM_NLA:
-            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, anim_framerate, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
+            write_kin(os.path.splitext(filepath)[0] + ".kin", bones, active_armature, scene.frame_start, scene.frame_end, anim_framerate, events, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
         else:
             for track in active_armature.animation_data.nla_tracks:
                 if len(track.strips) == 0:
@@ -905,7 +938,7 @@ def write_file(self, filepath, objects, scene,
                     frame_end = max(frame_end, strip.action_frame_end)
                 
                 track.is_solo = True
-                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), anim_framerate, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
+                write_kin(os.path.join(os.path.dirname(filepath), track.name + ".kin"), bones, active_armature, int(frame_start), int(frame_end), anim_framerate, events, EXPORT_GLOBAL_MATRIX, EXPORT_ANIM_SCALE, EXPORT_ANIM_RELATIVE_POSITIONING, EXPORT_ALL_BONES)
                 track.is_solo = False
 
         #reset frame after writing kin, for object transforms
@@ -1390,6 +1423,7 @@ def _write(self, context, filepath,
            EXPORT_ANIM_RELATIVE_POSITIONING,
            EXPORT_ALL_BONES,
            EXPORT_ANIM_NLA,
+           EXPORT_ANIM_EVENTS,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
            EXPORT_PATH_MODE,
@@ -1435,6 +1469,7 @@ def _write(self, context, filepath,
                EXPORT_ANIM_RELATIVE_POSITIONING,
                EXPORT_ALL_BONES,
                EXPORT_ANIM_NLA,
+               EXPORT_ANIM_EVENTS,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
                EXPORT_PATH_MODE,
@@ -1463,6 +1498,7 @@ def save(self, context,
          use_relative_positioning=False,
          export_all_bones=False,
          use_nla=False,
+         export_events=True,
          global_matrix=None,
          path_mode='AUTO'
          ):
@@ -1484,6 +1520,7 @@ def save(self, context,
            EXPORT_ANIM_RELATIVE_POSITIONING=use_relative_positioning,
            EXPORT_ALL_BONES=export_all_bones,
            EXPORT_ANIM_NLA=use_nla,
+           EXPORT_ANIM_EVENTS=export_events,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
            EXPORT_PATH_MODE=path_mode,
