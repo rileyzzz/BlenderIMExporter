@@ -256,7 +256,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, even
                 for evt in events:
                     typeid = 4 #AET_GENERIC_EVENT
                     if(evt["type"] == "sound"):
-                        typeid = 0
+                        typeid = 0 #AET_SOUND_EVENT
                     
                     evnt.write(struct.pack("<I", evt["frame"]))
                     evnt.write(struct.pack("<I", typeid))
@@ -308,8 +308,10 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, even
                     
                     #version 101 fixes a lot of things - bone matrices are parent relative rather than global, and rotations aren't backwards anymore
 
+                    #game may not bother animating if this is outside 0 to NumFrames - 1
                     #FrameNum
-                    fram.write(struct.pack("<I", i))
+                    fram.write(struct.pack("<I", i - frame_start))
+
                     #BoneDataList
                     for pose_bone in posebones_flat:
                         #mat = pose_bone.matrix_basis
@@ -942,7 +944,8 @@ def write_file(self, filepath, objects, scene,
                 track.is_solo = False
 
         #reset frame after writing kin, for object transforms
-        scene.frame_set(0)
+        # scene.frame_set(0)
+        scene.frame_set(scene.frame_start)
 
     #Attachment setup
     attachments = []
