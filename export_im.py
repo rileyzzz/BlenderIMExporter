@@ -1071,18 +1071,23 @@ def write_file(self, filepath, objects, scene,
 
                         #Opacity
                         matl.write(struct.pack("<f", mat_wrap.alpha))
+
+                        base_color = mat_wrap.base_color
+                        if mat_wrap.base_color_texture.image != None:
+                            base_color = [1.0, 1.0, 1.0]
+
                         #Ambient
-                        matl.write(struct.pack("<fff", mat_wrap.base_color[0] if not EXPORT_SUBSURF_AMBIENT or mat_wrap.node_principled_bsdf is None else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value[0],
-                                                       mat_wrap.base_color[1] if not EXPORT_SUBSURF_AMBIENT or mat_wrap.node_principled_bsdf is None else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value[1],
-                                                       mat_wrap.base_color[2] if not EXPORT_SUBSURF_AMBIENT or mat_wrap.node_principled_bsdf is None else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value[2]))
+                        matl.write(struct.pack("<fff", base_color[0] if not EXPORT_SUBSURF_AMBIENT or mat_wrap.node_principled_bsdf is None else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value[0],
+                                                       base_color[1] if not EXPORT_SUBSURF_AMBIENT or mat_wrap.node_principled_bsdf is None else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value[1],
+                                                       base_color[2] if not EXPORT_SUBSURF_AMBIENT or mat_wrap.node_principled_bsdf is None else mat_wrap.node_principled_bsdf.inputs["Subsurface Color"].default_value[2]))
                         #Diffuse
-                        matl.write(struct.pack("<fff", mat_wrap.base_color[0],
-                                                       mat_wrap.base_color[1],
-                                                       mat_wrap.base_color[2]))
+                        matl.write(struct.pack("<fff", base_color[0],
+                                                       base_color[1],
+                                                       base_color[2]))
                         #Specular
-                        matl.write(struct.pack("<fff", bl_math.lerp(mat_wrap.specular, mat_wrap.specular * mat_wrap.base_color[0], mat_wrap.specular_tint),
-                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * mat_wrap.base_color[1], mat_wrap.specular_tint),
-                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * mat_wrap.base_color[2], mat_wrap.specular_tint)))
+                        matl.write(struct.pack("<fff", bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[0], mat_wrap.specular_tint),
+                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[1], mat_wrap.specular_tint),
+                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[2], mat_wrap.specular_tint)))
                         
                         #Emissive
                         if hasattr(mat_wrap, 'emission_strength'):
