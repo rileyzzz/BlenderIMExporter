@@ -541,12 +541,34 @@ def write_file(self, filepath, objects, scene,
     bounds_set = False
     bounds_min = mathutils.Vector((0.0, 0.0, 0.0))
     bounds_max = mathutils.Vector((0.0, 0.0, 0.0))
-
+    use_anim_bounds = EXPORT_KIN and EXPORT_BOUNDS
     max_vert_influences = 0
     max_chunk_influences = 0
 
     material_groups = {}
     curves = []
+
+    if use_anim_bounds:
+        for i in range(scene.frame_start, scene.frame_end + 1):
+            scene.frame_set(i)
+            for obj in objects:
+                for coord in obj.bound_box:
+                    co_vector = mathutils.Vector((coord[0], coord[1], coord[2], 1.0))
+                    co_vector = EXPORT_GLOBAL_MATRIX @ obj.matrix_world @ co_vector
+                    if bounds_set:
+                        bounds_min.x = min(bounds_min.x, co_vector.x)
+                        bounds_min.y = min(bounds_min.y, co_vector.y)
+                        bounds_min.z = min(bounds_min.z, co_vector.z)
+                        bounds_max.x = max(bounds_max.x, co_vector.x)
+                        bounds_max.y = max(bounds_max.y, co_vector.y)
+                        bounds_max.z = max(bounds_max.z, co_vector.z)
+                    else:
+                        bounds_set = True
+                        bounds_min = mathutils.Vector(co_vector)
+                        bounds_max = mathutils.Vector(co_vector)
+                    
+        scene.frame_set(scene.frame_start)
+
 
     for obj in objects:
 
@@ -758,7 +780,7 @@ def write_file(self, filepath, objects, scene,
                             tangents.append(loop.tangent.normalized())
 
                         
-                        if EXPORT_BOUNDS:
+                        if EXPORT_BOUNDS and not use_anim_bounds:
                             if bounds_set:
                                 bounds_min.x = min(bounds_min.x, vert.co.x)
                                 bounds_min.y = min(bounds_min.y, vert.co.y)
