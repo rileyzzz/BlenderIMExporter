@@ -87,14 +87,15 @@ def jet_str(f, str, wide=False):
     f.write(len_bytes)
     f.write(encoded_name)
 
-def texture_file(type, img_path, target_dir, is_npo2):
+def texture_file(type, img_path, target_dir, is_npo2, alpha):
     basename = os.path.basename(img_path).lower()
     texturepath = sanitize_filename(target_dir + '\\' + os.path.splitext(basename)[0] + ".texture")
     txtpath = texturepath + ".txt"
     print("write to " + txtpath)
     with open(txtpath, "w") as f:
         f.write("Primary=" + basename + "\n")
-        f.write("Alpha=" + basename + "\n")
+        if alpha:
+            f.write("Alpha=" + basename + "\n")
         f.write("Tile=st" + "\n")
         if is_npo2:
             f.write("nonpoweroftwo=1\n")
@@ -1164,7 +1165,7 @@ def write_file(self, filepath, objects, scene,
                             if entry == "normalmap_texture" and type == 8:
                                 strength = 0.2 * mat_wrap.normalmap_strength
                             if EXPORT_TEXTURETXT:
-                                texturepath = texture_file(type, filepath, dest_dir, is_npo2)
+                                texturepath = texture_file(type, filepath, dest_dir, is_npo2, image.depth == (128 if image.is_float else 32))
                             else:
                                 basename = os.path.basename(filepath).lower()
                                 texturepath = dest_dir + '\\' + os.path.splitext(basename)[0] + ".texture"
