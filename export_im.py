@@ -1098,7 +1098,7 @@ def write_file(self, filepath, objects, scene,
                         matl.write(struct.pack("<f", mat_wrap.alpha))
 
                         base_color = mat_wrap.base_color
-                        if mat_wrap.base_color_texture.image != None:
+                        if mat_wrap.base_color_texture != None and mat_wrap.base_color_texture.image != None:
                             base_color = [1.0, 1.0, 1.0]
 
                         #Ambient
