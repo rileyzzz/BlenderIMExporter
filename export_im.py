@@ -1053,13 +1053,19 @@ def write_file(self, filepath, objects, scene,
                 if mat is None:
                     mat = defaultMaterial
                 
-                if not mat.name.endswith(".m.notex") and \
-                    not mat.name.endswith(".m.onetex") and \
-                    not mat.name.endswith(".m.reflect") and \
-                    not mat.name.endswith(".m.gloss") and \
-                    not mat.name.endswith(".m.tbumptex") and \
-                    not mat.name.endswith(".m.tbumpgloss") and \
-                    not mat.name.endswith(".m.tbumpenv"):
+                #initial period before material name extension isn't required
+                #TrainzMeshImporter name structure?
+                # filename, CRC32?, material name, extension
+                #*rmines2*4B6A2F83*material #1*m.onetex
+                #*waterglass_left*704EDB8B*bulb*m.onetex
+
+                if not mat.name.endswith("m.notex") and \
+                    not mat.name.endswith("m.onetex") and \
+                    not mat.name.endswith("m.reflect") and \
+                    not mat.name.endswith("m.gloss") and \
+                    not mat.name.endswith("m.tbumptex") and \
+                    not mat.name.endswith("m.tbumpgloss") and \
+                    not mat.name.endswith("m.tbumpenv"):
                     self.report({'WARNING'}, "Material " + mat.name + " on object " + obj.name + " is missing a valid material extension. This may cause issues in games earlier than TANE. A list of valid legacy material extensions is available here: https://online.ts2009.com/mediaWiki/index.php/Material_Types")
                 
                 rf.write('CHNK'.encode('utf-8'))
