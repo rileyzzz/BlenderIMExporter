@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 5, 1),
+    "version": (1, 5, 2),
     "blender": (2, 81, 6),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -107,6 +107,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             name="Bounding Box",
             description="Export bounding box data",
             default=True,
+            )
+
+    export_vertex_colors: BoolProperty(
+            name="Vertex Colors",
+            description="Export vertex color data (disables tangents)",
+            default=False,
             )
 
     export_neighbor_info: BoolProperty(
@@ -244,10 +250,13 @@ class IM_PT_export_include(bpy.types.Panel):
 
         #col.prop(operator, 'export_tangents')
         col.prop(operator, 'export_bounds')
+        #col.prop(operator, 'export_vertex_colors')
         col.prop(operator, 'export_neighbor_info')
         col.prop(operator, 'use_wide_strings')
+        #This is probably better under geometry rather than include, because the glTF exporter has material stuff under geometry
         col.prop(operator, 'subsurf_ambient')
         col.prop(operator, 'mat_custom_properties')
+
 
 
 class IM_PT_export_geometry(bpy.types.Panel):
@@ -272,11 +281,17 @@ class IM_PT_export_geometry(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, 'use_mesh_modifiers')
+
         layout.prop(operator, 'export_tangents')
+        layout.prop(operator, 'export_vertex_colors')
+
         layout.prop(operator, 'export_curves')
         layout.prop(operator, 'global_scale')
         layout.prop(operator, 'path_mode')
         layout.prop(operator, 'use_texturetxt')
+
+
+
         #layout.prop(operator, 'use_triangles')
 
 class IM_PT_export_armature(bpy.types.Panel):

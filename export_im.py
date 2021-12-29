@@ -515,6 +515,7 @@ def write_file(self, filepath, objects, scene,
                EXPORT_TEXTURETXT=True,
                EXPORT_TANGENTS=True,
                EXPORT_BOUNDS=True,
+               EXPORT_VERTEX_COLORS=False,
                EXPORT_NEIGHBOR_INFO=False,
                EXPORT_SUBSURF_AMBIENT=False,
                EXPORT_CUSTOM_PROPERTIES=False,
@@ -700,6 +701,7 @@ def write_file(self, filepath, objects, scene,
         face_normals = []
         face_list = []
         tangents = []
+        colors = []
 
         area = 0.0
         influence_bones = []
@@ -719,6 +721,10 @@ def write_file(self, filepath, objects, scene,
             me_verts = me.vertices[:]
             me_edges = me.edges[:]
 
+            if len(me.vertex_colors) == 0:
+                color_layer = None
+            else:
+                color_layer = me.vertex_colors.active.data[:]
 
             print("Processing mesh...")
 
@@ -754,8 +760,10 @@ def write_file(self, filepath, objects, scene,
                     #no = loop.normal
                     no = mathutils.Vector(face.split_normals[uv_index])
 
+                    color = color_layer[l_index].color if color_layer else [1, 1, 1, 1]
                     uv = uv_layer[l_index].uv if uv_layer != None else [0, 0]
-                    uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no)
+
+                    uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no), veckey3d(color)
                     uv_val = uv_dict.get(uv_key)
 
                     if uv_val is None:
@@ -780,6 +788,8 @@ def write_file(self, filepath, objects, scene,
                         if use_tangents:
                             tangents.append(loop.tangent.normalized())
 
+                        if EXPORT_VERTEX_COLORS:
+                            colors.append(color)
                         
                         if EXPORT_BOUNDS and not use_anim_bounds:
                             if bounds_set:
@@ -809,6 +819,7 @@ def write_file(self, filepath, objects, scene,
                         "face_normals": face_normals.copy(),
                         "face_list": face_list.copy(),
                         "tangents": tangents.copy(),
+                        "colors": colors.copy(),
                         "area": area,
                         "uv_layer": uv_layer,
                         "parent": objectParent,
@@ -824,6 +835,7 @@ def write_file(self, filepath, objects, scene,
                     face_normals.clear()
                     face_list.clear()
                     tangents.clear()
+                    colors.clear()
                     area = 0.0
                     uv_dict.clear()
                     uv = uv_key = uv_val = None
@@ -844,6 +856,7 @@ def write_file(self, filepath, objects, scene,
                 "face_normals": face_normals.copy(),
                 "face_list": face_list.copy(),
                 "tangents": tangents.copy(),
+                "colors": colors.copy(),
                 "area": area,
                 "uv_layer": uv_layer,
                 "parent": objectParent,
@@ -1042,6 +1055,7 @@ def write_file(self, filepath, objects, scene,
                 face_normals    = entry["face_normals"]
                 face_list       = entry["face_list"]
                 tangents        = entry["tangents"]
+                colors          = entry["colors"]
                 area            = entry["area"]
                 uv_layer        = entry["uv_layer"]
                 objParent       = entry["parent"]
@@ -1192,7 +1206,18 @@ def write_file(self, filepath, objects, scene,
 
                     attr.write('GEOM'.encode('utf-8'))
                     with io.BytesIO() as geom:
-                        chunk_ver(geom, 201)
+                        ver = 201
+                        if EXPORT_VERTEX_COLORS:
+                            ver = 104
+                        chunk_ver(geom, ver)
+                        
+                        # GEOM versions:
+                        # 103 - Multiple texturesets
+                        # 104 - 103 + vertex colors
+                        # 200 - Parent bones
+                        # 201 - 200 + tangent data
+
+                        # I've only ever seen 103 and 104 show up in Bridge It - if any legacy Trainz assets actually use these let me know
 
                         #Flags
                         if not is_curve:
@@ -1201,10 +1226,11 @@ def write_file(self, filepath, objects, scene,
                             geom.write(struct.pack("<I", 2)) #GC_LINES
                         
                         #UseTangents (201)
-                        if EXPORT_TANGENTS and len(tangents) > 0:
-                            geom.write(struct.pack("<I", 1))
-                        else:
-                            geom.write(struct.pack("<I", 0))
+                        if ver >= 201:
+                            if EXPORT_TANGENTS and len(tangents) > 0:
+                                geom.write(struct.pack("<I", 1))
+                            else:
+                                geom.write(struct.pack("<I", 0))
 
                         #Area
                         geom.write(struct.pack("<f", area))
@@ -1220,15 +1246,21 @@ def write_file(self, filepath, objects, scene,
                         #NumFaceNormals
                         geom.write(struct.pack("<I", len(face_normals)))
 
+                        #NumTexCoordSets
+                        if ver == 103 or ver == 104:
+                            geom.write(struct.pack("<I", 1))
+                        
                         #Required for games pre-TANE, otherwise mesh refuses to animate
                         #MaxInfluence (102)
-                        geom.write(struct.pack("<I", max_influence))
+                        if ver >= 102:
+                            geom.write(struct.pack("<I", max_influence))
 
-                        #Parent (201)
-                        if objParent != None:
-                            jet_str(geom, objParent.name)
-                        else:
-                            geom.write(struct.pack("<I", 0))
+                        #Parent (200)
+                        if ver >= 200:
+                            if objParent != None:
+                                jet_str(geom, objParent.name)
+                            else:
+                                geom.write(struct.pack("<I", 0))
 
                         #Vertices
                         for idx, vert in enumerate(verts):
@@ -1277,14 +1309,22 @@ def write_file(self, filepath, objects, scene,
                         #Indices
                         for idx in indices:
                             geom.write(struct.pack("<H", idx))
+                        
                         #VertexNormals
                         for normal in normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                        
                         #FaceNormals
                         for normal in face_normals:
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
-                        #Tangents
-                        if EXPORT_TANGENTS and len(tangents) > 0:
+                        
+                        #VertexColors (104 only)
+                        if ver == 104 and EXPORT_VERTEX_COLORS and len(colors) > 0:
+                            for color in colors:
+                                geom.write(struct.pack("<BBBB", int(color[0] * 255.0), int(color[1] * 255.0), int(color[2] * 255.0), int(color[3] * 255.0)))
+                        
+                        #Tangents (201)
+                        if ver >= 201 and EXPORT_TANGENTS and len(tangents) > 0:
                             for tangent in tangents:
                                 geom.write(struct.pack("<fff", tangent[0], tangent[1], tangent[2]))
 
@@ -1449,6 +1489,7 @@ def _write(self, context, filepath,
            EXPORT_TEXTURETXT,
            EXPORT_TANGENTS,
            EXPORT_BOUNDS,
+           EXPORT_VERTEX_COLORS,
            EXPORT_NEIGHBOR_INFO,
            EXPORT_WIDE_STRINGS,
            EXPORT_SUBSURF_AMBIENT,
@@ -1496,6 +1537,7 @@ def _write(self, context, filepath,
                EXPORT_TEXTURETXT,
                EXPORT_TANGENTS,
                EXPORT_BOUNDS,
+               EXPORT_VERTEX_COLORS,
                EXPORT_NEIGHBOR_INFO,
                EXPORT_SUBSURF_AMBIENT,
                EXPORT_CUSTOM_PROPERTIES,
@@ -1524,6 +1566,7 @@ def save(self, context,
          use_texturetxt=True,
          export_tangents=True,
          export_bounds=True,
+         export_vertex_colors=False,
          export_neighbor_info=False,
          use_wide_strings=False,
          subsurf_ambient=False,
@@ -1546,6 +1589,7 @@ def save(self, context,
            EXPORT_TEXTURETXT=use_texturetxt,
            EXPORT_TANGENTS=export_tangents,
            EXPORT_BOUNDS=export_bounds,
+           EXPORT_VERTEX_COLORS=export_vertex_colors,
            EXPORT_NEIGHBOR_INFO=export_neighbor_info,
            EXPORT_WIDE_STRINGS=use_wide_strings,
            EXPORT_SUBSURF_AMBIENT=subsurf_ambient,
