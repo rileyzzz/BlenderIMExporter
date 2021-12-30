@@ -1090,6 +1090,12 @@ def write_file(self, filepath, objects, scene,
                     attr.write('MATL'.encode('utf-8'))
                     with io.BytesIO() as matl:
                         chunk_ver(matl, 103)
+
+                        # MATL versions:
+                        # 101
+                        # 102 - 101 + properties, opacity
+                        # 103 - same as 102
+                        
                         #Name
                         jet_str(matl, mat.name)
 
@@ -1145,8 +1151,12 @@ def write_file(self, filepath, objects, scene,
                         matl.write(struct.pack("<fff", emission[0],
                                                        emission[1],
                                                        emission[2]))
+                        
                         #Shininess
-                        matl.write(struct.pack("<f", (1.0 - mat_wrap.roughness) * 128.0))
+                        shininess = (1.0 - mat_wrap.roughness) * 128.0
+                        shininess = min(max(shininess, 10.0), 128.0)
+                        matl.write(struct.pack("<f", shininess))
+
                         #Texture setup
                         #texCount = 0
                         textures = []
@@ -1184,6 +1194,9 @@ def write_file(self, filepath, objects, scene,
                             #don't modify strength for tbumptex shinestrength
                             if entry == "normalmap_texture" and type == 8:
                                 strength = 0.2 * mat_wrap.normalmap_strength
+
+                            # TODO: adjust strength value for TEX_Reflect (m.reflect)
+                            
                             if EXPORT_TEXTURETXT:
                                 texturepath = texture_file(type, filepath, dest_dir, is_npo2, image.depth == (128 if image.is_float else 32))
                             else:
