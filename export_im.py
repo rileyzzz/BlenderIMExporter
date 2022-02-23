@@ -756,14 +756,18 @@ def write_file(self, filepath, objects, scene,
                 for uv_index, l_index in enumerate(face.loops):
                     loop = me.loops[l_index]
                     vert = me_verts[loop.vertex_index]
-
+                    
                     #no = loop.normal
                     no = mathutils.Vector(face.split_normals[uv_index])
+                    tg = loop.tangent
 
                     color = color_layer[l_index].color if color_layer else [1, 1, 1, 1]
                     uv = uv_layer[l_index].uv if uv_layer != None else [0, 0]
 
                     uv_key = loop.vertex_index, veckey2d(uv), veckey3d(no), veckey3d(color)
+                    # todo - is this necessary? probably not, tangents don't seem to be affected by split normals
+                    # veckey3d(tg),
+
                     uv_val = uv_dict.get(uv_key)
 
                     if uv_val is None:
@@ -786,7 +790,7 @@ def write_file(self, filepath, objects, scene,
                         normals.append(no.normalized())
 
                         if use_tangents:
-                            tangents.append(loop.tangent.normalized())
+                            tangents.append(tg.normalized())
 
                         if EXPORT_VERTEX_COLORS:
                             colors.append(color)
