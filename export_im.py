@@ -648,10 +648,18 @@ def write_file(self, filepath, objects, scene,
         mats_2_faces = {}
         edges_2_faces = {}
 
+        invalid_material_indices = {}
+
         for face in me.loop_triangles:
             mat_index = face.material_index
             if mat_index is None:
                 mat_index = 0
+            if mat_index < 0 or mat_index >= len(materials):
+                mat_index = 0
+                if mat_index not in invalid_material_indices:
+                    invalid_material_indices[mat_index] = True
+                    self.report({'WARNING'}, f'Object \'{obj.name}\' contains an invalid material index {face.material_index}.')
+
             mat = materials[mat_index]
             if mat not in mats_2_faces:
                 mats_2_faces[mat] = []
