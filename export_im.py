@@ -1149,9 +1149,15 @@ def write_file(self, filepath, objects, scene,
                                                        base_color[1],
                                                        base_color[2]))
                         #Specular
-                        matl.write(struct.pack("<fff", bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[0], mat_wrap.specular_tint),
-                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[1], mat_wrap.specular_tint),
-                                                       bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[2], mat_wrap.specular_tint)))
+                        if isinstance(mat_wrap.specular_tint, Color):
+                            # Blender 4.0 - specular tint is now a Color
+                            matl.write(struct.pack("<fff", mat_wrap.specular_tint[0] * mat_wrap.specular,
+                                                           mat_wrap.specular_tint[1] * mat_wrap.specular,
+                                                           mat_wrap.specular_tint[2] * mat_wrap.specular))
+                        else:
+                            matl.write(struct.pack("<fff", bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[0], mat_wrap.specular_tint),
+                                                        bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[1], mat_wrap.specular_tint),
+                                                        bl_math.lerp(mat_wrap.specular, mat_wrap.specular * base_color[2], mat_wrap.specular_tint)))
                         
                         #Emissive
                         if hasattr(mat_wrap, 'emission_strength'):

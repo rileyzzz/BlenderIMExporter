@@ -20,8 +20,8 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 5, 3),
-    "blender": (2, 93, 0),
+    "version": (1, 5, 4),
+    "blender": (3, 0, 0),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
     "warning": "",
