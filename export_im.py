@@ -527,6 +527,10 @@ def write_file(self, filepath, objects, scene,
                EXPORT_ALL_BONES=False,
                EXPORT_ANIM_NLA=False,
                EXPORT_ANIM_EVENTS=True,
+               EXPORT_EXPLICIT_VERSIONING=False,
+               EXPORT_INFO_VERSION=None,
+               EXPORT_MATL_VERSION=None,
+               EXPORT_GEOM_VERSION=None,
                EXPORT_SEL_ONLY=False,
                EXPORT_GLOBAL_MATRIX=None,
                EXPORT_PATH_MODE='AUTO',
@@ -1031,10 +1035,16 @@ def write_file(self, filepath, objects, scene,
 
             rf.write('INFO'.encode('utf-8'))
             with io.BytesIO() as info:
-                if EXPORT_BOUNDS:
-                    chunk_ver(info, 104)
+                info_version = 104
+                if EXPORT_EXPLICIT_VERSIONING:
+                    info_version = int(EXPORT_INFO_VERSION)
                 else:
-                    chunk_ver(info, 102)
+                    if EXPORT_BOUNDS:
+                        info_version = 104
+                    else:
+                        info_version = 102
+                
+                chunk_ver(info, info_version)
 
                 objLocation, objRotation, objScale = EXPORT_GLOBAL_MATRIX.decompose()
 
@@ -1044,13 +1054,15 @@ def write_file(self, filepath, objects, scene,
                 info.write(struct.pack("<ffff", objRotation.w, objRotation.x, objRotation.y, objRotation.z))
                 #NumAttributes
                 info.write(struct.pack("<I", len(meshes)))
-                #MaxInfluencePerVertex
-                info.write(struct.pack("<I", max_vert_influences))
-                #MaxInfluencePerChunk
-                info.write(struct.pack("<I", max_chunk_influences))
+
+                if info_version >= 102:
+                    #MaxInfluencePerVertex
+                    info.write(struct.pack("<I", max_vert_influences))
+                    #MaxInfluencePerChunk
+                    info.write(struct.pack("<I", max_chunk_influences))
 
                 #Bounding Box
-                if EXPORT_BOUNDS:
+                if info_version >= 104:
                     info.write(struct.pack("<fff", bounds_min.x, bounds_min.y, bounds_min.z))
                     info.write(struct.pack("<fff", bounds_max.x, bounds_max.y, bounds_max.z))
 
@@ -1101,31 +1113,35 @@ def write_file(self, filepath, objects, scene,
                     attr.write(struct.pack("<I", i))
                     attr.write('MATL'.encode('utf-8'))
                     with io.BytesIO() as matl:
-                        chunk_ver(matl, 103)
+                        matl_version = 103
+                        if EXPORT_EXPLICIT_VERSIONING:
+                            matl_version = int(EXPORT_MATL_VERSION)
+                        
+                        chunk_ver(matl, matl_version)
 
                         # MATL versions:
                         # 101
                         # 102 - 101 + properties, opacity
                         # 103 - same as 102
                         
-                        #Name
-                        jet_str(matl, mat.name)
+                        if matl_version >= 102:
+                            # Name
+                            jet_str(matl, mat.name)
 
-                        custom_properties = {}
-                        if EXPORT_CUSTOM_PROPERTIES:
-                            for K in mat.keys():
-                                data = mat[K]
-                                if K not in '_RNA_UI' and (isinstance(data, float) or isinstance(data, int) or isinstance(data, str) or isinstance(data, bool)):
-                                    if not isinstance(data, str):
-                                        data = str(data)
-                                    custom_properties[K] = data
-                        
-                        #NumProperties
-                        #matl.write(struct.pack("<I", 0))
-                        matl.write(struct.pack("<I", len(custom_properties)))
-                        for k in custom_properties:
-                            jet_str(matl, k)
-                            jet_str(matl, custom_properties[k])
+                            custom_properties = {}
+                            if EXPORT_CUSTOM_PROPERTIES:
+                                for K in mat.keys():
+                                    data = mat[K]
+                                    if K not in '_RNA_UI' and (isinstance(data, float) or isinstance(data, int) or isinstance(data, str) or isinstance(data, bool)):
+                                        if not isinstance(data, str):
+                                            data = str(data)
+                                        custom_properties[K] = data
+                            
+                            #NumProperties
+                            matl.write(struct.pack("<I", len(custom_properties)))
+                            for k in custom_properties:
+                                jet_str(matl, k)
+                                jet_str(matl, custom_properties[k])
                         
                         #nodes
                         mat_wrap = node_shader_utils.PrincipledBSDFWrapper(mat)
@@ -1134,7 +1150,8 @@ def write_file(self, filepath, objects, scene,
                         matl.write(struct.pack("<I", int(not mat.use_backface_culling)))
 
                         #Opacity
-                        matl.write(struct.pack("<f", mat_wrap.alpha))
+                        if matl_version >= 102:
+                            matl.write(struct.pack("<f", mat_wrap.alpha))
 
                         base_color = mat_wrap.base_color
                         if mat_wrap.base_color_texture != None and mat_wrap.base_color_texture.image != None:
@@ -1237,10 +1254,14 @@ def write_file(self, filepath, objects, scene,
 
                     attr.write('GEOM'.encode('utf-8'))
                     with io.BytesIO() as geom:
-                        ver = 201
-                        if EXPORT_VERTEX_COLORS:
-                            ver = 104
-                        chunk_ver(geom, ver)
+                        geom_version = 201
+                        if EXPORT_EXPLICIT_VERSIONING:
+                            geom_version = int(EXPORT_GEOM_VERSION)
+                        else:
+                            if EXPORT_VERTEX_COLORS:
+                                ver = 104
+                        
+                        chunk_ver(geom, geom_version)
                         
                         # GEOM versions:
                         # 103 - Multiple texturesets
@@ -1252,42 +1273,55 @@ def write_file(self, filepath, objects, scene,
 
                         #Flags
                         if not is_curve:
-                            geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
+                            if geom_version >= 101:
+                                geom.write(struct.pack("<I", 4)) #GC_TRIANGLES
                         else:
-                            geom.write(struct.pack("<I", 2)) #GC_LINES
+                            if geom_version >= 101:
+                                geom.write(struct.pack("<I", 2)) #GC_LINES
+                            else:
+                                # Curves not supported.
+                                self.report({'WARNING'}, 'Curves not supported in GEOM v100!')
                         
-                        #UseTangents (201)
-                        if ver >= 201:
+                        # UseTangents (201)
+                        if geom_version >= 201:
                             if EXPORT_TANGENTS and len(tangents) > 0:
                                 geom.write(struct.pack("<I", 1))
                             else:
                                 geom.write(struct.pack("<I", 0))
 
-                        #Area
+                        # Area
                         geom.write(struct.pack("<f", area))
-                        #NumVertices
+
+                        # NumVertices
                         geom.write(struct.pack("<I", len(verts)))
-                        #NumPrimitives
+
+                        # NumPrimitives
+                        # NOTE: NumPrimitives is supposed to be geom_version >= 101 according to JET docs,
+                        # but D20 meshes are v100 and have this field.
                         if not is_curve:
                             geom.write(struct.pack("<I", len(indices) // 3))
                         else:
                             geom.write(struct.pack("<I", len(indices) // 2))
+                        
                         #NumIndices
-                        geom.write(struct.pack("<I", len(indices)))
+                        if geom_version >= 101:
+                            geom.write(struct.pack("<I", len(indices)))
+                        
                         #NumFaceNormals
-                        geom.write(struct.pack("<I", len(face_normals)))
+                        if geom_version >= 101:
+                            geom.write(struct.pack("<I", len(face_normals)))
 
                         #NumTexCoordSets
-                        if ver == 103 or ver == 104:
+                        if geom_version == 103 or geom_version == 104:
                             geom.write(struct.pack("<I", 1))
                         
                         #Required for games pre-TANE, otherwise mesh refuses to animate
                         #MaxInfluence (102)
-                        if ver >= 102:
+                        if geom_version >= 102:
                             geom.write(struct.pack("<I", max_influence))
 
                         #Parent (200)
-                        if ver >= 200:
+                        if geom_version >= 200:
                             if objParent != None:
                                 jet_str(geom, objParent.name)
                             else:
@@ -1346,16 +1380,17 @@ def write_file(self, filepath, objects, scene,
                             geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
                         
                         #FaceNormals
-                        for normal in face_normals:
-                            geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                        if geom_version >= 101:
+                            for normal in face_normals:
+                                geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
                         
                         #VertexColors (104 only)
-                        if ver == 104 and EXPORT_VERTEX_COLORS and len(colors) > 0:
+                        if geom_version == 104 and EXPORT_VERTEX_COLORS and len(colors) > 0:
                             for color in colors:
                                 geom.write(struct.pack("<BBBB", int(color[0] * 255.0), int(color[1] * 255.0), int(color[2] * 255.0), int(color[3] * 255.0)))
                         
                         #Tangents (201)
-                        if ver >= 201 and EXPORT_TANGENTS and len(tangents) > 0:
+                        if geom_version >= 201 and EXPORT_TANGENTS and len(tangents) > 0:
                             for tangent in tangents:
                                 geom.write(struct.pack("<fff", tangent[0], tangent[1], tangent[2]))
 
@@ -1533,6 +1568,10 @@ def _write(self, context, filepath,
            EXPORT_ALL_BONES,
            EXPORT_ANIM_NLA,
            EXPORT_ANIM_EVENTS,
+           EXPORT_EXPLICIT_VERSIONING,
+           EXPORT_INFO_VERSION,
+           EXPORT_MATL_VERSION,
+           EXPORT_GEOM_VERSION,
            EXPORT_SEL_ONLY,
            EXPORT_GLOBAL_MATRIX,
            EXPORT_PATH_MODE,
@@ -1580,6 +1619,10 @@ def _write(self, context, filepath,
                EXPORT_ALL_BONES,
                EXPORT_ANIM_NLA,
                EXPORT_ANIM_EVENTS,
+               EXPORT_EXPLICIT_VERSIONING,
+               EXPORT_INFO_VERSION,
+               EXPORT_MATL_VERSION,
+               EXPORT_GEOM_VERSION,
                EXPORT_SEL_ONLY,
                EXPORT_GLOBAL_MATRIX,
                EXPORT_PATH_MODE,
@@ -1610,6 +1653,10 @@ def save(self, context,
          export_all_bones=False,
          use_nla=False,
          export_events=True,
+         use_explicit_versioning=False,
+         info_version=None,
+         matl_version=None,
+         geom_version=None,
          global_matrix=None,
          path_mode='AUTO'
          ):
@@ -1633,6 +1680,10 @@ def save(self, context,
            EXPORT_ALL_BONES=export_all_bones,
            EXPORT_ANIM_NLA=use_nla,
            EXPORT_ANIM_EVENTS=export_events,
+           EXPORT_EXPLICIT_VERSIONING=use_explicit_versioning,
+           EXPORT_INFO_VERSION=info_version,
+           EXPORT_MATL_VERSION=matl_version,
+           EXPORT_GEOM_VERSION=geom_version,
            EXPORT_SEL_ONLY=use_selection,
            EXPORT_GLOBAL_MATRIX=global_matrix,
            EXPORT_PATH_MODE=path_mode,

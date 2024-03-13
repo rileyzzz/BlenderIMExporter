@@ -20,7 +20,7 @@
 bl_info = {
     "name": "Export Indexed Mesh Format (.im)",
     "author": "Riley Lemmler",
-    "version": (1, 5, 4),
+    "version": (1, 5, 5),
     "blender": (3, 0, 0),
     "location": "File > Export",
     "description": "Export Trainz indexed meshes",
@@ -65,7 +65,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default="*.im",
             options={'HIDDEN'},
             )
-
+    
     # context group
     use_selection: BoolProperty(
             name="Selection Only",
@@ -192,6 +192,42 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             min=0.01, max=1000.0,
             default=1.0,
             )
+
+
+    use_explicit_versioning: BoolProperty(
+            name="Use Explicit Versioning",
+            description="Force specific chunk versions to target older versions of JET.",
+            default=False,
+            )
+    
+    info_version: EnumProperty(
+        name="INFO",
+        items=[
+        ('100', '100 (Shadowlands, Harn)', ''),
+        ('101', '101 (JET SDK)', ''),
+        ('102', '102 (JET SDK)', 'Added max influence per vert and chunk'),
+        ('104', '104 (Trainz)', 'Added bounding box'),
+    ], default='104')
+
+    matl_version: EnumProperty(
+        name="MATL",
+        items=[
+        ('101', '101 (JET SDK)', ''),
+        ('102', '102 (JET SDK, Trainz 1.1)', 'Added name, custom properties, opacity'),
+        ('103', '103 (Trainz)', ''),
+    ], default='103')
+
+    geom_version: EnumProperty(
+        name="GEOM",
+        items=[
+        ('100', '100 (JET SDK samples, D20)', ''),
+        ('101', '101 (JET SDK)', 'Added flags, primitive types, face normals'),
+        ('102', '102 (JET SDK)', 'Added max influence'),
+        ('103', '103 (Bridge It)', 'Support for multiple texturesets'),
+        ('104', '104 (Bridge It)', 'Support for vertex colors'),
+        ('200', '200 (Trainz)', '102 with parent bones'),
+        ('201', '201 (Trainz)', '200 with tangents data'),
+    ], default='201')
 
     path_mode: path_reference_mode
 
@@ -354,6 +390,38 @@ class IM_PT_export_animation(bpy.types.Panel):
         layout.prop(operator, 'export_events')
         layout.prop(operator, 'use_blender_framerate')
 
+class IM_PT_export_versions(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "Explicit Versioning"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "EXPORT_SCENE_OT_im"
+
+    def draw_header(self, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        self.layout.prop(operator, 'use_explicit_versioning', text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.enabled = operator.use_explicit_versioning
+        layout.prop(operator, 'info_version')
+        layout.prop(operator, 'matl_version')
+        layout.prop(operator, 'geom_version')
+
 def menu_func_export(self, context):
     self.layout.operator(ExportIM.bl_idname, text="Indexed Mesh (.im)")
 
@@ -363,7 +431,8 @@ classes = (
     IM_PT_export_include,
     IM_PT_export_geometry,
     IM_PT_export_armature,
-    IM_PT_export_animation
+    IM_PT_export_animation,
+    IM_PT_export_versions
 )
 
 
