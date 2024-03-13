@@ -91,6 +91,12 @@ class ExportIM(bpy.types.Operator, ExportHelper):
             default=True,
             )
 
+    convert_tga: BoolProperty(
+            name="Convert to .TGA",
+            description="Convert all exported images to uncompressed TGA for older Trainz versions (experimental)",
+            default=False,
+            )
+    
     # legacy_chunk_data: BoolProperty(
     #         name="Legacy Chunk Data",
     #         description="Uses legacy geometry data for exports where compatibility with ancient games is a must. Disables tangent export",
@@ -325,6 +331,7 @@ class IM_PT_export_geometry(bpy.types.Panel):
         layout.prop(operator, 'global_scale')
         layout.prop(operator, 'path_mode')
         layout.prop(operator, 'use_texturetxt')
+        layout.prop(operator, 'convert_tga')
 
 
 

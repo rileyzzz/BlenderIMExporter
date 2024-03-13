@@ -513,6 +513,7 @@ def write_file(self, filepath, objects, scene,
                EXPORT_APPLY_MODIFIERS=True,
                EXPORT_CURVES=False,
                EXPORT_TEXTURETXT=True,
+               EXPORT_CONVERT_TGA=False,
                EXPORT_TANGENTS=True,
                EXPORT_BOUNDS=True,
                EXPORT_VERTEX_COLORS=False,
@@ -1222,8 +1223,28 @@ def write_file(self, filepath, objects, scene,
                             is_npo2 = not power_of_two(image.size[0]) or not power_of_two(image.size[1])
                             if is_npo2:
                                 self.report({'WARNING'}, 'Texture ' + image.filepath + ' is not a power of two. Consider resizing it.')
-                            filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
-                                                       EXPORT_PATH_MODE, "", copy_set, image.library)
+
+                            if not EXPORT_CONVERT_TGA:
+                                filepath = io_utils.path_reference(image.filepath, source_dir, dest_dir,
+                                                        EXPORT_PATH_MODE, "", copy_set, image.library)
+                            else:
+                                # Windows sucks.
+                                image_path = image.filepath.lstrip('\\/')
+
+                                # Resave the image.
+                                filepath = dest_dir + '\\' + os.path.basename(image_path).lower() + ".tga"
+                                output_image = image.copy()
+
+                                # Don't allow images bigger than 4k.
+                                # if output_image.size[0] > 2048 or output_image.size[1] > 2048:
+                                #     output_image.scale(2048, 2048)
+                                    
+                                output_image.file_format = 'TARGA_RAW'
+                                print(f"Saved image to {filepath}, src={image_path}")
+                                output_image.save(filepath=filepath)
+
+                                bpy.data.images.remove(output_image)
+                            
                             strength = 1.0
 
                             #don't modify strength for tbumptex shinestrength
@@ -1553,6 +1574,7 @@ def _write(self, context, filepath,
            EXPORT_APPLY_MODIFIERS,
            EXPORT_CURVES,
            EXPORT_TEXTURETXT,
+           EXPORT_CONVERT_TGA,
            EXPORT_TANGENTS,
            EXPORT_BOUNDS,
            EXPORT_VERTEX_COLORS,
@@ -1605,6 +1627,7 @@ def _write(self, context, filepath,
                EXPORT_APPLY_MODIFIERS,
                EXPORT_CURVES,
                EXPORT_TEXTURETXT,
+               EXPORT_CONVERT_TGA,
                EXPORT_TANGENTS,
                EXPORT_BOUNDS,
                EXPORT_VERTEX_COLORS,
@@ -1638,6 +1661,7 @@ def save(self, context,
          use_mesh_modifiers=True,
          export_curves=False,
          use_texturetxt=True,
+         convert_tga=False,
          export_tangents=True,
          export_bounds=True,
          export_vertex_colors=False,
@@ -1665,6 +1689,7 @@ def save(self, context,
            EXPORT_APPLY_MODIFIERS=use_mesh_modifiers,
            EXPORT_CURVES=export_curves,
            EXPORT_TEXTURETXT=use_texturetxt,
+           EXPORT_CONVERT_TGA=convert_tga,
            EXPORT_TANGENTS=export_tangents,
            EXPORT_BOUNDS=export_bounds,
            EXPORT_VERTEX_COLORS=export_vertex_colors,
