@@ -624,7 +624,8 @@ def write_file(self, filepath, objects, scene,
         print("Pre-processing object " + obj.name)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
         
-        me.calc_normals_split()
+        if bpy.app.version < (4, 1, 0):
+            me.calc_normals_split()
 
         use_tangents = EXPORT_TANGENTS
         if EXPORT_TANGENTS:
