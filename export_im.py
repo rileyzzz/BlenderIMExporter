@@ -392,7 +392,7 @@ def write_kin(filepath, bones, armature, frame_start, frame_end, framerate, even
 
             end_chunk(f, rf)
 
-def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set, meshes):
+def gather_curve_data(me, obj, objectParent, parentBone, material, EXPORT_BOUNDS, bounds_set, meshes):
 
     if len(me.uv_layers) == 0:
         uv_layer = None
@@ -471,6 +471,7 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
                 "area": 0.0,
                 "uv_layer": uv_layer,
                 "parent": objectParent,
+                "parent_bone": parentBone,
                 "is_curve": True,
                 "max_influence": len(influence_bones)
             }
@@ -501,6 +502,7 @@ def gather_curve_data(me, obj, objectParent, material, EXPORT_BOUNDS, bounds_set
             "area": 0.0,
             "uv_layer": uv_layer,
             "parent": objectParent,
+            "parent_bone": parentBone,
             "is_curve": True,
             "max_influence": len(influence_bones)
         }
@@ -614,12 +616,18 @@ def write_file(self, filepath, objects, scene,
         #uv_layer = me.uv_layers.active.data
         #mesh_triangulate(me)
         objectParent = None #empty and lattice parents
+        parentBone = None
+
         #meshes can be nodes themselves
         if "b.r." in obj.name:
             objectParent = obj
         elif obj.parent != None:
             if "b.r." in obj.parent.name:
                 objectParent = obj.parent
+        
+        if obj.parent_bone != None:
+            if "b.r." in obj.parent_bone:
+                parentBone = obj.parent_bone
         
         print("Pre-processing object " + obj.name)
         me.transform(EXPORT_GLOBAL_MATRIX @ obj.matrix_world)
@@ -646,7 +654,7 @@ def write_file(self, filepath, objects, scene,
             materials.append(None)
 
         if EXPORT_CURVES and is_curve:
-            gather_curve_data(me, obj, objectParent, materials[0], EXPORT_BOUNDS, bounds_set, meshes)
+            gather_curve_data(me, obj, objectParent, parentBone, materials[0], EXPORT_BOUNDS, bounds_set, meshes)
             continue
         
         me.calc_loop_triangles()
@@ -680,7 +688,7 @@ def write_file(self, filepath, objects, scene,
         
         for mat in materials:
             #if objects have a different parent (animation) they shouldn't be collated
-            mat_key = mat, use_tangents, objectParent
+            mat_key = mat, use_tangents, objectParent, parentBone
 
             if mat_key not in material_groups:
                 material_groups[mat_key] = []
@@ -695,7 +703,8 @@ def write_file(self, filepath, objects, scene,
                 "materials": materials,
                 "faces": mats_2_faces[mat],
                 "edges_2_faces": edges_2_faces,
-                "parent": objectParent
+                "parent": objectParent,
+                "parent_bone": parentBone
             }
 
             material_groups[mat_key].append(obj_data)
@@ -727,6 +736,7 @@ def write_file(self, filepath, objects, scene,
             obj_faces = obj_data["faces"]
             edges_2_faces = obj_data["edges_2_faces"]
             objectParent = obj_data["parent"]
+            parentBone = obj_data["parent_bone"]
 
             if len(me.uv_layers) == 0:
                 uv_layer = None
@@ -845,6 +855,7 @@ def write_file(self, filepath, objects, scene,
                         "area": area,
                         "uv_layer": uv_layer,
                         "parent": objectParent,
+                        "parent_bone": parentBone,
                         "is_curve": False,
                         "max_influence": len(influence_bones)
                     }
@@ -882,6 +893,7 @@ def write_file(self, filepath, objects, scene,
                 "area": area,
                 "uv_layer": uv_layer,
                 "parent": objectParent,
+                "parent_bone": parentBone,
                 "is_curve": False,
                 "max_influence": len(influence_bones)
             }
@@ -1089,9 +1101,13 @@ def write_file(self, filepath, objects, scene,
                 area            = entry["area"]
                 uv_layer        = entry["uv_layer"]
                 objParent       = entry["parent"]
+                parentBoneName  = entry["parent_bone"]
                 is_curve        = entry["is_curve"]
                 max_influence   = entry["max_influence"]
 
+                parentBone = None
+                if parentBoneName in bones:
+                    parentBone = bones[parentBoneName]
 
                 defaultMaterial = bpy.data.materials.new(obj.name + ".m.notex")
                 if mat is None:
@@ -1347,9 +1363,14 @@ def write_file(self, filepath, objects, scene,
                             geom.write(struct.pack("<I", max_influence))
 
                         #Parent (200)
+                        has_chunk_parent = False
                         if geom_version >= 200:
-                            if objParent != None:
+                            if EXPORT_SKEL and parentBone != None:
+                                jet_str(geom, parentBoneName)
+                                has_chunk_parent = True
+                            elif EXPORT_SKEL and objParent != None:
                                 jet_str(geom, objParent.name)
+                                has_chunk_parent = True
                             else:
                                 geom.write(struct.pack("<I", 0))
 
@@ -1363,17 +1384,22 @@ def write_file(self, filepath, objects, scene,
                             #geom.write(struct.pack("<ff", texcoord[0], 1.0 - texcoord[1]))
 
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
-                            if objParent != None:
-                                #OLD METHOD
-                                #parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
-                                #co_vector = parentMat.inverted() @ co_vector
+                            if has_chunk_parent:
+                                if parentBone != None:
+                                    parentMat = parentBone["worldMatrix"]
+                                    co_vector = parentMat.inverted() @ co_vector
 
-                                parentLoc, parentRot, parentScale = objParent.matrix_world.decompose()
+                                elif objParent != None:
+                                    #OLD METHOD
+                                    #parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
+                                    #co_vector = parentMat.inverted() @ co_vector
 
-                                locMat = mathutils.Matrix.Translation(parentLoc)
-                                rotMat = parentRot.to_matrix().to_4x4()
-                                parentMat = locMat @ rotMat
-                                co_vector = EXPORT_GLOBAL_MATRIX @ parentMat.inverted() @ co_vector
+                                    parentLoc, parentRot, parentScale = objParent.matrix_world.decompose()
+
+                                    locMat = mathutils.Matrix.Translation(parentLoc)
+                                    rotMat = parentRot.to_matrix().to_4x4()
+                                    parentMat = locMat @ rotMat
+                                    co_vector = EXPORT_GLOBAL_MATRIX @ parentMat.inverted() @ co_vector
 
                             if math.isnan(co_vector[0]) or math.isnan(co_vector[1]) or math.isnan(co_vector[2]):
                                 self.report({'WARNING'}, 'NaN position data detected in chunk ' + str(i) + " {" + obj.name + "}")
