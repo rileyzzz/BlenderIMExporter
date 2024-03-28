@@ -772,7 +772,11 @@ def write_file(self, filepath, objects, scene,
                     vert = me_verts[loop.vertex_index]
                     
                     #no = loop.normal
-                    no = mathutils.Vector(face.split_normals[uv_index])
+                    if bpy.app.version < (4, 1, 0):
+                        no = mathutils.Vector(face.split_normals[uv_index])
+                    else:
+                        no = me.corner_normals[l_index].vector
+                    
                     tg = loop.tangent
 
                     color = color_layer[l_index].color if color_layer else [1, 1, 1, 1]
