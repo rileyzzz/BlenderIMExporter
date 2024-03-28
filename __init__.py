@@ -160,7 +160,7 @@ class ExportIM(bpy.types.Operator, ExportHelper):
     use_skel: BoolProperty(
             name="Use SKEL Hierarchy",
             description="Use a SKEL hierarchy instead of INFL to store bone data. Will break skinning, but can reduce file size",
-            default=False,
+            default=True,
             )
 
     export_anim_scale: BoolProperty(
