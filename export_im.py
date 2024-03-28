@@ -604,12 +604,18 @@ def write_file(self, filepath, objects, scene,
                         armature_modifiers[idx] = modifier.show_viewport
                         modifier.show_viewport = False
             
+            # Force all meshes to triangulate themselves.
+            triangle_mod = obj.modifiers.new('im', 'TRIANGULATE')
+
             depsgraph = bpy.context.evaluated_depsgraph_get()
             final = obj.evaluated_get(depsgraph)
             try:
                 me = final.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph).copy()
             except RuntimeError:
                 me = None
+            
+            if triangle_mod != None:
+                obj.modifiers.remove(triangle_mod)
 
             if EXPORT_KIN:
                 # restore Armature modifiers
@@ -1438,7 +1444,7 @@ def write_file(self, filepath, objects, scene,
                         for normal in normals:
                             co_normal = mathutils.Vector((normal[0], normal[1], normal[2]))
                             if has_chunk_parent:
-                                co_normal = inv_parent_transform.to_3x3() @ co_normal
+                                co_normal = (inv_parent_transform.to_3x3() @ co_normal).normalized()
 
                             geom.write(struct.pack("<fff", co_normal[0], co_normal[1], co_normal[2]))
                         
@@ -1447,7 +1453,7 @@ def write_file(self, filepath, objects, scene,
                             for normal in face_normals:
                                 co_normal = mathutils.Vector((normal[0], normal[1], normal[2]))
                                 if has_chunk_parent:
-                                    co_normal = inv_parent_transform.to_3x3() @ co_normal
+                                    co_normal = (inv_parent_transform.to_3x3() @ co_normal).normalized()
                                 
                                 geom.write(struct.pack("<fff", co_normal[0], co_normal[1], co_normal[2]))
                         
@@ -1461,7 +1467,7 @@ def write_file(self, filepath, objects, scene,
                             for tangent in tangents:
                                 co_tangent = mathutils.Vector((tangent[0], tangent[1], tangent[2]))
                                 if has_chunk_parent:
-                                    co_tangent = inv_parent_transform.to_3x3() @ co_tangent
+                                    co_tangent = (inv_parent_transform.to_3x3() @ co_tangent).normalized()
                                 
                                 geom.write(struct.pack("<fff", co_tangent[0], co_tangent[1], co_tangent[2]))
 
