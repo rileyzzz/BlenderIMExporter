@@ -153,15 +153,23 @@ def recursive_writebone_skel(chnk, srcBone, armature, EXPORT_GLOBAL_MATRIX, EXPO
         if srcBone.parent == None:
             boneMat = srcBone.matrix_local
         else:
-            boneMat = srcBone.parent.matrix_local.inverted() @ srcBone.matrix_local
+            #convert bone transforms into world space and remove the scale
+            parentMatrix = srcBone.parent.matrix_local
+            parentMatrix = remove_scale_from_matrix(parentMatrix)
+            childMatrix = srcBone.matrix_local
+            childMatrix = remove_scale_from_matrix(childMatrix)
 
+            boneMat = parentMatrix.inverted() @ childMatrix
+        
         if armature != None:
             boneMat = EXPORT_GLOBAL_MATRIX @ armature.matrix_world @ boneMat
         else:
             boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
 
         position, rotation, scale = boneMat.decompose()
-        rotation = rotation.inverted()
+
+        # Shouldn't be necessary to invert the rotation for .im SKEL.
+        # rotation = rotation.inverted()
 
         #Position
         bone.write(struct.pack("<fff", *position))
@@ -1364,12 +1372,25 @@ def write_file(self, filepath, objects, scene,
 
                         #Parent (200)
                         has_chunk_parent = False
+                        inv_parent_transform = None
                         if geom_version >= 200:
                             if EXPORT_SKEL and parentBone != None:
                                 jet_str(geom, parentBoneName)
+                                
+                                inv_parent_transform = parentBone["worldMatrix"].inverted()
                                 has_chunk_parent = True
                             elif EXPORT_SKEL and objParent != None:
                                 jet_str(geom, objParent.name)
+
+                                #OLD METHOD
+                                #parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
+                                #co_vector = parentMat.inverted() @ co_vector
+                                parentLoc, parentRot, parentScale = objParent.matrix_world.decompose()
+
+                                locMat = mathutils.Matrix.Translation(parentLoc)
+                                rotMat = parentRot.to_matrix().to_4x4()
+                                inv_parent_transform = (EXPORT_GLOBAL_MATRIX @ locMat @ rotMat).inverted()
+
                                 has_chunk_parent = True
                             else:
                                 geom.write(struct.pack("<I", 0))
@@ -1385,21 +1406,7 @@ def write_file(self, filepath, objects, scene,
 
                             co_vector = mathutils.Vector((co[0], co[1], co[2], 1.0))
                             if has_chunk_parent:
-                                if parentBone != None:
-                                    parentMat = parentBone["worldMatrix"]
-                                    co_vector = parentMat.inverted() @ co_vector
-
-                                elif objParent != None:
-                                    #OLD METHOD
-                                    #parentMat = EXPORT_GLOBAL_MATRIX @ objParent.matrix_world
-                                    #co_vector = parentMat.inverted() @ co_vector
-
-                                    parentLoc, parentRot, parentScale = objParent.matrix_world.decompose()
-
-                                    locMat = mathutils.Matrix.Translation(parentLoc)
-                                    rotMat = parentRot.to_matrix().to_4x4()
-                                    parentMat = locMat @ rotMat
-                                    co_vector = EXPORT_GLOBAL_MATRIX @ parentMat.inverted() @ co_vector
+                                co_vector = inv_parent_transform @ co_vector
 
                             if math.isnan(co_vector[0]) or math.isnan(co_vector[1]) or math.isnan(co_vector[2]):
                                 self.report({'WARNING'}, 'NaN position data detected in chunk ' + str(i) + " {" + obj.name + "}")
@@ -1429,12 +1436,20 @@ def write_file(self, filepath, objects, scene,
                         
                         #VertexNormals
                         for normal in normals:
-                            geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                            co_normal = mathutils.Vector((normal[0], normal[1], normal[2]))
+                            if has_chunk_parent:
+                                co_normal = inv_parent_transform.to_3x3() @ co_normal
+
+                            geom.write(struct.pack("<fff", co_normal[0], co_normal[1], co_normal[2]))
                         
                         #FaceNormals
                         if geom_version >= 101:
                             for normal in face_normals:
-                                geom.write(struct.pack("<fff", normal[0], normal[1], normal[2]))
+                                co_normal = mathutils.Vector((normal[0], normal[1], normal[2]))
+                                if has_chunk_parent:
+                                    co_normal = inv_parent_transform.to_3x3() @ co_normal
+                                
+                                geom.write(struct.pack("<fff", co_normal[0], co_normal[1], co_normal[2]))
                         
                         #VertexColors (104 only)
                         if geom_version == 104 and EXPORT_VERTEX_COLORS and len(colors) > 0:
@@ -1444,7 +1459,11 @@ def write_file(self, filepath, objects, scene,
                         #Tangents (201)
                         if geom_version >= 201 and EXPORT_TANGENTS and len(tangents) > 0:
                             for tangent in tangents:
-                                geom.write(struct.pack("<fff", tangent[0], tangent[1], tangent[2]))
+                                co_tangent = mathutils.Vector((tangent[0], tangent[1], tangent[2]))
+                                if has_chunk_parent:
+                                    co_tangent = inv_parent_transform.to_3x3() @ co_tangent
+                                
+                                geom.write(struct.pack("<fff", co_tangent[0], co_tangent[1], co_tangent[2]))
 
                         #bm.free()
 
