@@ -103,6 +103,25 @@ def texture_file(type, img_path, target_dir, is_npo2, alpha):
             f.write("NormalMapHint=normalmap\n")
     return texturepath
 
+# https://blenderartists.org/t/converting-textures-to-another-format/568064/4
+def convert_image(image, dest):
+
+    # backup image settings
+    backup_file_format = bpy.context.scene.render.image_settings.file_format
+    backup_color_mode = bpy.context.scene.render.image_settings.color_mode
+    
+    # update file format and color format to what we want
+    bpy.context.scene.render.image_settings.file_format = 'TARGA_RAW'
+    bpy.context.scene.render.image_settings.color_mode = 'RGBA'
+
+    # convert and save the texture: the name of the method is a bit misleading: it doesn't
+    # render anything. It just saves the image using the settings in bpy.context.scene.render.image_settings
+    image.save_render(dest)
+
+    # restore image settings
+    bpy.context.scene.render.image_settings.file_format = backup_file_format
+    bpy.context.scene.render.image_settings.color_mode = backup_color_mode
+
 def chunk_ver(f, ver):
     f.write(struct.pack("<I", ver))
 
@@ -1267,18 +1286,23 @@ def write_file(self, filepath, objects, scene,
                                 image_path = image.filepath.lstrip('\\/')
 
                                 # Resave the image.
-                                filepath = dest_dir + '\\' + os.path.basename(image_path).lower() + ".tga"
-                                output_image = image.copy()
+                                basepath = os.path.basename(image_path).lower()
+                                filepath = dest_dir + '\\' + os.path.splitext(basepath)[0] + ".tga"
+                                # output_image = image.copy()
 
                                 # Don't allow images bigger than 4k.
                                 # if output_image.size[0] > 2048 or output_image.size[1] > 2048:
                                 #     output_image.scale(2048, 2048)
                                     
-                                output_image.file_format = 'TARGA_RAW'
-                                print(f"Saved image to {filepath}, src={image_path}")
-                                output_image.save(filepath=filepath)
+                                # output_image.file_format = 'TARGA_RAW'
+                                # print(f"Saved image to {filepath}, src={image_path}")
+                                # output_image.save_render(filepath=filepath)
 
-                                bpy.data.images.remove(output_image)
+                                # bpy.data.images.remove(output_image)
+
+                                convert_image(image, filepath)
+                                # print(f"Saved image to {filepath}, src={image_path}")
+                                
                             
                             strength = 1.0
 
