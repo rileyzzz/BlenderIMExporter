@@ -1520,8 +1520,15 @@ def write_file(self, filepath, objects, scene,
                     
                     end_chunk(rf, attr)
                 bpy.data.materials.remove(defaultMaterial)
-
-            if not EXPORT_SKEL or not EXPORT_KIN:
+            
+            if EXPORT_SKEL and EXPORT_KIN and root_bone is not None:
+                rf.write('SKEL'.encode('utf-8'))
+                with io.BytesIO() as skel:
+                    chunk_ver(skel, 100)
+                    # if root_bone is not None:
+                    recursive_writebone_skel(skel, root_bone, active_armature, EXPORT_GLOBAL_MATRIX, EXPORT_ALL_BONES)
+                    end_chunk(rf, skel)
+            else:
                 rf.write('INFL'.encode('utf-8'))
                 with io.BytesIO() as infl:
                     chunk_ver(infl, 100)
@@ -1590,13 +1597,6 @@ def write_file(self, filepath, objects, scene,
                                 vertpos = influence[2]
                                 infl.write(struct.pack("<fff", vertpos[0], vertpos[1], vertpos[2]))
                     end_chunk(rf, infl)
-            else:
-                rf.write('SKEL'.encode('utf-8'))
-                with io.BytesIO() as skel:
-                    chunk_ver(skel, 100)
-                    if root_bone is not None:
-                        recursive_writebone_skel(skel, root_bone, active_armature, EXPORT_GLOBAL_MATRIX, EXPORT_ALL_BONES)
-                    end_chunk(rf, skel)
 
             #AttachmentInfo
             if len(attachments) > 0:
