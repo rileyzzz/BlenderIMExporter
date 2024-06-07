@@ -1339,7 +1339,7 @@ def write_file(self, filepath, objects, scene,
                             geom_version = int(EXPORT_GEOM_VERSION)
                         else:
                             if EXPORT_VERTEX_COLORS:
-                                ver = 104
+                                geom_version = 104
                         
                         chunk_ver(geom, geom_version)
                         
