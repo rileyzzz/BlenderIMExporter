@@ -1256,7 +1256,7 @@ def write_file(self, filepath, objects, scene,
                             "base_color_texture", #TEX_Diffuse
                             "specular_texture", #TEX_Specular
                             "roughness_texture", #TEX_Shine
-                            "normalmap_texture" if mat.name.endswith(".m.tbumptex") else None, #TEX_Shinestrength, tbumptex uses the normal map alpha to determine shine strength?
+                            None, #TEX_Shinestrength
                             "emission_color_texture" if emission_strength != 0.0 else None, #TEX_Selfillum
                             "alpha_texture", #TEX_Opacity
                             None, #TEX_Filtercolor
@@ -1489,7 +1489,9 @@ def write_file(self, filepath, objects, scene,
                         #Tangents (201)
                         if geom_version >= 201 and EXPORT_TANGENTS and len(tangents) > 0:
                             for tangent in tangents:
-                                co_tangent = mathutils.Vector((tangent[0], tangent[1], tangent[2]))
+                                # original indexed mesh tangents were left handed whereas Blender uses a right handed coordinate system.
+                                # so flip the tangent sign here to compensate.
+                                co_tangent = -mathutils.Vector((tangent[0], tangent[1], tangent[2]))
                                 if has_chunk_parent:
                                     co_tangent = (inv_parent_transform.to_3x3() @ co_tangent).normalized()
                                 
