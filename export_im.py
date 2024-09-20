@@ -1107,10 +1107,17 @@ def write_file(self, filepath, objects, scene,
                 info.write(struct.pack("<I", len(meshes)))
 
                 if info_version >= 102:
-                    #MaxInfluencePerVertex
-                    info.write(struct.pack("<I", max_vert_influences))
-                    #MaxInfluencePerChunk
-                    info.write(struct.pack("<I", max_chunk_influences))
+                    # Nonzero MaxInfluencePerVertex without any bones present causes rendering to fail in JET but not in TANE+.
+                    if root_bone is not None:
+                        #MaxInfluencePerVertex
+                        info.write(struct.pack("<I", max_vert_influences))
+                        #MaxInfluencePerChunk
+                        info.write(struct.pack("<I", max_chunk_influences))
+                    else:
+                        #MaxInfluencePerVertex
+                        info.write(struct.pack("<I", 0))
+                        #MaxInfluencePerChunk
+                        info.write(struct.pack("<I", 0))
 
                 #Bounding Box
                 if info_version >= 104:
@@ -1438,11 +1445,16 @@ def write_file(self, filepath, objects, scene,
                             if has_chunk_parent:
                                 co_vector = inv_parent_transform @ co_vector
 
-                            if math.isnan(co_vector[0]) or math.isnan(co_vector[1]) or math.isnan(co_vector[2]):
+                            if not math.isfinite(co_vector[0]) or not math.isfinite(co_vector[1]) or not math.isfinite(co_vector[2]):
                                 self.report({'WARNING'}, 'NaN position data detected in chunk ' + str(i) + " {" + obj.name + "}")
-                                if math.isnan(co_vector[0]): co_vector[0] = 0.0
-                                if math.isnan(co_vector[1]): co_vector[1] = 0.0
-                                if math.isnan(co_vector[2]): co_vector[2] = 0.0
+                                if not math.isfinite(co_vector[0]): co_vector[0] = 0.0
+                                if not math.isfinite(co_vector[1]): co_vector[1] = 0.0
+                                if not math.isfinite(co_vector[2]): co_vector[2] = 0.0
+
+                            if not math.isfinite(texcoord[0]) or not math.isfinite(texcoord[1]):
+                                self.report({'WARNING'}, 'NaN UV data detected in chunk ' + str(i) + " {" + obj.name + "}")
+                                if not math.isfinite(texcoord[0]): texcoord[0] = 0.0
+                                if not math.isfinite(texcoord[1]): texcoord[1] = 0.0
                                 
                             #co_vector = EXPORT_GLOBAL_MATRIX @ obj.matrix_parent_inverse @ co_vector
 
@@ -1470,6 +1482,12 @@ def write_file(self, filepath, objects, scene,
                             if has_chunk_parent:
                                 co_normal = (inv_parent_transform.to_3x3() @ co_normal).normalized()
 
+                            if not math.isfinite(co_normal[0]) or not math.isfinite(co_normal[1]) or not math.isfinite(co_normal[2]):
+                                self.report({'WARNING'}, 'NaN normal data detected in chunk ' + str(i) + " {" + obj.name + "}")
+                                if not math.isfinite(co_normal[0]): co_normal[0] = 0.0
+                                if not math.isfinite(co_normal[1]): co_normal[1] = 0.0
+                                if not math.isfinite(co_normal[2]): co_normal[2] = 0.0
+
                             geom.write(struct.pack("<fff", co_normal[0], co_normal[1], co_normal[2]))
                         
                         #FaceNormals
@@ -1478,6 +1496,12 @@ def write_file(self, filepath, objects, scene,
                                 co_normal = mathutils.Vector((normal[0], normal[1], normal[2]))
                                 if has_chunk_parent:
                                     co_normal = (inv_parent_transform.to_3x3() @ co_normal).normalized()
+                                
+                                if not math.isfinite(co_normal[0]) or not math.isfinite(co_normal[1]) or not math.isfinite(co_normal[2]):
+                                    self.report({'WARNING'}, 'NaN face normal data detected in chunk ' + str(i) + " {" + obj.name + "}")
+                                    if not math.isfinite(co_normal[0]): co_normal[0] = 0.0
+                                    if not math.isfinite(co_normal[1]): co_normal[1] = 0.0
+                                    if not math.isfinite(co_normal[2]): co_normal[2] = 0.0
                                 
                                 geom.write(struct.pack("<fff", co_normal[0], co_normal[1], co_normal[2]))
                         
@@ -1494,6 +1518,12 @@ def write_file(self, filepath, objects, scene,
                                 co_tangent = -mathutils.Vector((tangent[0], tangent[1], tangent[2]))
                                 if has_chunk_parent:
                                     co_tangent = (inv_parent_transform.to_3x3() @ co_tangent).normalized()
+                                
+                                if not math.isfinite(co_tangent[0]) or not math.isfinite(co_tangent[1]) or not math.isfinite(co_tangent[2]):
+                                    self.report({'WARNING'}, 'NaN tangent data detected in chunk ' + str(i) + " {" + obj.name + "}")
+                                    if not math.isfinite(co_tangent[0]): co_tangent[0] = 0.0
+                                    if not math.isfinite(co_tangent[1]): co_tangent[1] = 0.0
+                                    if not math.isfinite(co_tangent[2]): co_tangent[2] = 0.0
                                 
                                 geom.write(struct.pack("<fff", co_tangent[0], co_tangent[1], co_tangent[2]))
 
