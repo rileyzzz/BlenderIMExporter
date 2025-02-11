@@ -778,10 +778,11 @@ def write_file(self, filepath, objects, scene,
             me_verts = me.vertices[:]
             me_edges = me.edges[:]
 
-            if len(me.vertex_colors) == 0:
-                color_layer = None
-            else:
+            if EXPORT_VERTEX_COLORS and len(me.vertex_colors) != 0:
+                # Blender 4.0 TODO: this is broken
                 color_layer = me.vertex_colors.active.data[:]
+            else:
+                color_layer = None
 
             print("Processing mesh...")
 
