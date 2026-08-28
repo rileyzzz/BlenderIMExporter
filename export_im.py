@@ -969,7 +969,14 @@ def write_file(self, filepath, objects, scene,
                     boneMat = parentMatrix.inverted() @ childMatrix
                 
                 boneMat = EXPORT_GLOBAL_MATRIX @ boneMat
-                worldMat = EXPORT_GLOBAL_MATRIX @ remove_scale_from_matrix(active_armature.matrix_world @ bone.matrix_local)
+
+                # Original version
+                # worldMat = EXPORT_GLOBAL_MATRIX @ remove_scale_from_matrix(active_armature.matrix_world @ bone.matrix_local)
+                # Better world matrix
+                # Objects are already pre-transformed into worldspace. We then un-transform based on the bone's 'worldMatrix'.
+                # It makes the most sense to use the world pose matrix to ensure that transfers over properly.
+                pose_bone = active_armature.pose.bones[bone.name]
+                worldMat = EXPORT_GLOBAL_MATRIX @ remove_scale_from_matrix(active_armature.matrix_world @ pose_bone.matrix)
 
                 bone_data = {
                     "srcBone": bone,
@@ -1317,6 +1324,10 @@ def write_file(self, filepath, objects, scene,
                             #don't modify strength for tbumptex shinestrength
                             if entry == "normalmap_texture" and type == 8:
                                 strength = 0.2 * mat_wrap.normalmap_strength
+                            elif entry == "metallic_texture" and type == 9:
+                                strength = mat_wrap.ior
+                                if strength > 1.0:
+                                    strength = 1.0
 
                             # TODO: adjust strength value for TEX_Reflect (m.reflect)
                             
